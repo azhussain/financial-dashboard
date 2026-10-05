@@ -2,6 +2,8 @@ package com.example.dashboard.service;
 
 import com.example.dashboard.client.YahooFinanceClient;
 import com.example.dashboard.dto.Candle;
+import com.example.dashboard.dto.QuoteSummary;
+import com.example.dashboard.dto.SearchResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -99,6 +101,34 @@ class StockServiceTest {
         when(yahooFinanceClient.getHistory(any(), any(), any())).thenReturn(List.of());
 
         assertThat(stockService.getHistory("FAKE", LocalDate.now(), LocalDate.now())).isEmpty();
+    }
+
+    @Test
+    void returnsTopStocksSortedByMarketCapLimited() throws Exception {
+        when(yahooFinanceClient.getQuotes(any())).thenReturn(List.of(
+                new QuoteSummary("AAPL", "Apple", BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("3000")),
+                new QuoteSummary("MSFT", "Microsoft", BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("4000")),
+                new QuoteSummary("NOCAP", "NoCap", BigDecimal.TEN, BigDecimal.ONE, null),
+                new QuoteSummary("NVDA", "Nvidia", BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("5000")),
+                new QuoteSummary("GOOGL", "Alphabet", BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("2000"))));
+
+        List<QuoteSummary> top = stockService.getTopStocks(2);
+
+        assertThat(top).extracting(QuoteSummary::symbol).containsExactly("NVDA", "MSFT");
+    }
+
+    @Test
+    void searchKeepsOnlyUsEquitiesAndLimits() throws Exception {
+        when(yahooFinanceClient.search("apple")).thenReturn(List.of(
+                new SearchResult("AAPL", "Apple Inc.", "NMS", "EQUITY"),
+                new SearchResult("SAAPL=F", "Apple Futures", "CME", "FUTURE"),
+                new SearchResult("APLE", "Apple Hospitality", "NYQ", "EQUITY"),
+                new SearchResult("APPL.NS", "Apple India", "NSI", "EQUITY"),
+                new SearchResult("FAKE", "Fake Co", "NMS", "EQUITY")));
+
+        List<SearchResult> results = stockService.search("apple", 2);
+
+        assertThat(results).extracting(SearchResult::symbol).containsExactly("AAPL", "APLE");
     }
 
     @Test

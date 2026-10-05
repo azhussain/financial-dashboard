@@ -103,6 +103,48 @@ class StockControllerTest {
     }
 
     @Test
+    void returnsTopStocks() throws Exception {
+        when(stockService.getTopStocks(5)).thenReturn(List.of(
+                new com.example.dashboard.dto.QuoteSummary("NVDA", "NVIDIA Corporation",
+                        new BigDecimal("238.90"), new BigDecimal("2.12"), new BigDecimal("5770000000000"))));
+
+        mockMvc.perform(get("/api/stocks/top"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].symbol").value("NVDA"))
+                .andExpect(jsonPath("$[0].marketCap").value(5770000000000L));
+    }
+
+    @Test
+    void rejectsInvalidTopLimit() throws Exception {
+        mockMvc.perform(get("/api/stocks/top").param("limit", "0"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/stocks/top").param("limit", "99"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(stockService);
+    }
+
+    @Test
+    void returnsSearchResults() throws Exception {
+        when(stockService.search("app", 8)).thenReturn(List.of(
+                new com.example.dashboard.dto.SearchResult("AAPL", "Apple Inc.", "NMS", "EQUITY")));
+
+        mockMvc.perform(get("/api/stocks/search").param("q", "app"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].symbol").value("AAPL"))
+                .andExpect(jsonPath("$[0].name").value("Apple Inc."));
+    }
+
+    @Test
+    void rejectsBlankSearchQuery() throws Exception {
+        mockMvc.perform(get("/api/stocks/search").param("q", "   "))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(stockService);
+    }
+
+    @Test
     void mapsUpstreamFailureToGeneric500() throws Exception {
         when(stockService.getHistory(any(), any(), any()))
                 .thenThrow(new IOException("upstream exploded"));

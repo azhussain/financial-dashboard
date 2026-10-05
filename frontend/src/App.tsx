@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import CandleChart, { type Candle } from './components/CandleChart'
+import TickerInput from './components/TickerInput'
+import TopStocks from './components/TopStocks'
 
 function toISODate(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -17,16 +19,18 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function fetchData() {
-    if (!ticker.trim()) {
+  async function fetchData(symbol?: string) {
+    const target = (symbol ?? ticker).trim()
+    if (!target) {
       setError('Please enter a ticker symbol')
       return
     }
+    if (symbol) setTicker(symbol)
     setLoading(true)
     setError(null)
     try {
       const res = await fetch(
-        `/api/stocks/${encodeURIComponent(ticker.trim().toUpperCase())}/history?from=${startDate}&to=${endDate}`,
+        `/api/stocks/${encodeURIComponent(target.toUpperCase())}/history?from=${startDate}&to=${endDate}`,
       )
       if (!res.ok) {
         const body = await res.json().catch(() => null)
@@ -54,18 +58,11 @@ export default function App() {
         </p>
 
         <div className="mt-8 flex flex-wrap items-end gap-4 rounded-xl bg-gray-900 p-5 ring-1 ring-gray-800">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
-              Ticker
-            </span>
-            <input
-              type="text"
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value)}
-              placeholder="AAPL"
-              className="w-32 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm uppercase placeholder:text-gray-500 focus:border-emerald-500 focus:outline-none"
-            />
-          </label>
+          <TickerInput
+            value={ticker}
+            onChange={setTicker}
+            onSubmit={() => fetchData()}
+          />
 
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -92,13 +89,15 @@ export default function App() {
           </label>
 
           <button
-            onClick={fetchData}
+            onClick={() => fetchData()}
             disabled={loading}
             className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? 'Loading…' : 'Load chart'}
           </button>
         </div>
+
+        <TopStocks onSelect={(s) => fetchData(s)} selected={ticker} />
 
         {error && (
           <div className="mt-4 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
