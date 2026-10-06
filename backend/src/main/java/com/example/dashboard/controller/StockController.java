@@ -69,6 +69,24 @@ public class StockController {
         }
     }
 
+    @GetMapping("/markets")
+    public ResponseEntity<?> getTopStocksByRegion(
+            @RequestParam(defaultValue = "5") int limit) {
+
+        if (limit < 1 || limit > 20) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Limit must be between 1 and 20"));
+        }
+
+        try {
+            return ResponseEntity.ok(stockService.getTopStocksByRegion(limit));
+        } catch (Exception e) {
+            log.error("Failed to fetch regional top stocks", e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to fetch top stocks"));
+        }
+    }
+
     @GetMapping("/search")
     public ResponseEntity<?> search(@RequestParam String q) {
         String query = q.trim();

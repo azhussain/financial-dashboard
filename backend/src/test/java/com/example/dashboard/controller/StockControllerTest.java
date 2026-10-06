@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -106,12 +107,27 @@ class StockControllerTest {
     void returnsTopStocks() throws Exception {
         when(stockService.getTopStocks(5)).thenReturn(List.of(
                 new com.example.dashboard.dto.QuoteSummary("NVDA", "NVIDIA Corporation",
-                        new BigDecimal("238.90"), new BigDecimal("2.12"), new BigDecimal("5770000000000"))));
+                        new BigDecimal("238.90"), new BigDecimal("2.12"), new BigDecimal("5770000000000"), "USD", null)));
 
         mockMvc.perform(get("/api/stocks/top"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].symbol").value("NVDA"))
                 .andExpect(jsonPath("$[0].marketCap").value(5770000000000L));
+    }
+
+    @Test
+    void returnsTopStocksByRegion() throws Exception {
+        when(stockService.getTopStocksByRegion(5)).thenReturn(Map.of(
+                "AMERICAS", List.of(new com.example.dashboard.dto.QuoteSummary("NVDA", "NVIDIA",
+                        new BigDecimal("238.90"), new BigDecimal("2.12"), new BigDecimal("5770000000000"), "USD", 1_700_000_000L)),
+                "APAC", List.of(new com.example.dashboard.dto.QuoteSummary("0700.HK", "Tencent",
+                        new BigDecimal("610"), new BigDecimal("1.5"), new BigDecimal("5600000000000"), "HKD", 1_700_000_000L))));
+
+        mockMvc.perform(get("/api/stocks/markets"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.AMERICAS[0].symbol").value("NVDA"))
+                .andExpect(jsonPath("$.APAC[0].currency").value("HKD"))
+                .andExpect(jsonPath("$.AMERICAS[0].marketTime").value(1_700_000_000L));
     }
 
     @Test

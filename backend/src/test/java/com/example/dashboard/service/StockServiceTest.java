@@ -16,9 +16,11 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -37,12 +39,18 @@ class StockServiceTest {
     private StockService stockService;
 
     private HistoricalQuote quote(String date, String open, String high, String low, String close) {
+        return quote(date, open, high, low, close, close);
+    }
+
+    private HistoricalQuote quote(String date, String open, String high,
+                                  String low, String close, String adjClose) {
         LocalDate d = LocalDate.parse(date);
-        Calendar cal = GregorianCalendar.from(d.atStartOfDay(ZoneId.systemDefault()));
+        // noon UTC keeps the mapped candle date stable across server timezones
+        Calendar cal = GregorianCalendar.from(d.atTime(12, 0).atZone(ZoneOffset.UTC));
         // constructor order: symbol, date, open, low, high, close, adjClose, volume
         return new HistoricalQuote("AAPL", cal,
                 new BigDecimal(open), new BigDecimal(low), new BigDecimal(high),
-                new BigDecimal(close), new BigDecimal(close), 1000L);
+                new BigDecimal(close), new BigDecimal(adjClose), 1000L);
     }
 
     @Test
@@ -103,18 +111,122 @@ class StockServiceTest {
         assertThat(stockService.getHistory("FAKE", LocalDate.now(), LocalDate.now())).isEmpty();
     }
 
+    private QuoteSummary quote(String symbol, String name, String marketCap, String currency) {
+        return new QuoteSummary(symbol, name, BigDecimal.TEN, BigDecimal.ONE,
+                marketCap == null ? null : new BigDecimal(marketCap), currency, 1_700_000_000L);
+    }
+
+    private QuoteSummary fx(String symbol, String price) {
+        return new QuoteSummary(symbol, symbol, new BigDecimal(price), BigDecimal.ZERO,
+                null, "USD", 1_700_000_000L);
+    }
+
     @Test
     void returnsTopStocksSortedByMarketCapLimited() throws Exception {
         when(yahooFinanceClient.getQuotes(any())).thenReturn(List.of(
-                new QuoteSummary("AAPL", "Apple", BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("3000")),
-                new QuoteSummary("MSFT", "Microsoft", BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("4000")),
-                new QuoteSummary("NOCAP", "NoCap", BigDecimal.TEN, BigDecimal.ONE, null),
-                new QuoteSummary("NVDA", "Nvidia", BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("5000")),
-                new QuoteSummary("GOOGL", "Alphabet", BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("2000"))));
+                quote("AAPL", "Apple", "3000", "USD"),
+                quote("MSFT", "Microsoft", "4000", "USD"),
+                quote("NOCAP", "NoCap", null, "USD"),
+                quote("NVDA", "Nvidia", "5000", "USD"),
+                quote("GOOGL", "Alphabet", "2000", "USD")));
 
         List<QuoteSummary> top = stockService.getTopStocks(2);
 
         assertThat(top).extracting(QuoteSummary::symbol).containsExactly("NVDA", "MSFT");
+    }
+
+    @Test
+    void returnsTopStocksGroupedByRegion() throws Exception {
+        when(yahooFinanceClient.getQuotes(any())).thenReturn(List.of(
+                quote("NVDA", "Nvidia", "5000", "USD"),
+                quote("AAPL", "Apple", "3000", "USD"),
+                quote("ASML.AS", "ASML", "400", "EUR"),
+                quote("MC.PA", "LVMH", "350", "EUR"),
+                quote("0700.HK", "Tencent", "600", "HKD"),
+                quote("9988.HK", "Alibaba", "200", "HKD")));
+
+        Map<String, List<QuoteSummary>> regions = stockService.getTopStocksByRegion(2);
+
+        assertThat(regions.keySet()).containsExactly("AMERICAS", "EMEA", "APAC");
+        assertThat(regions.get("AMERICAS")).extracting(QuoteSummary::symbol)
+                .containsExactly("NVDA", "AAPL");
+        assertThat(regions.get("EMEA")).extracting(QuoteSummary::symbol)
+                .containsExactly("ASML.AS", "MC.PA");
+        assertThat(regions.get("APAC")).extracting(QuoteSummary::symbol)
+                .containsExactly("0700.HK", "9988.HK");
+    }
+
+    @Test
+    void ranksRegionalStocksByUsdNormalizedMarketCap() throws Exception {
+        // Raw caps: "stockB" 5000 XYZ > "stockA" 900 USD — but XYZUSD is 0.10,
+        // so stockA should rank first once normalized.
+        when(yahooFinanceClient.getQuotes(any())).thenAnswer(inv -> {
+            List<String> symbols = inv.getArgument(0);
+            if (symbols.stream().anyMatch(s -> s.endsWith("=X"))) {
+                return List.of(fx("HKDUSD=X", "0.13"), fx("EURUSD=X", "1.10"));
+            }
+            return List.of(
+                    quote("AAPL", "Apple", "3000", "USD"),
+                    quote("0700.HK", "Tencent", "60000", "HKD"),   // 7800 USD
+                    quote("9988.HK", "Alibaba", "20000", "HKD"),   // 2600 USD
+                    quote("ASML.AS", "ASML", "400", "EUR"),        // 440 USD
+                    quote("MC.PA", "LVMH", "350", "EUR"));         // 385 USD
+        });
+
+        Map<String, List<QuoteSummary>> regions = stockService.getTopStocksByRegion(2);
+
+        // 60000 HKD * 0.13 = 7800 > 20000 HKD * 0.13 = 2600
+        assertThat(regions.get("APAC")).extracting(QuoteSummary::symbol)
+                .containsExactly("0700.HK", "9988.HK");
+        assertThat(regions.get("EMEA")).extracting(QuoteSummary::symbol)
+                .containsExactly("ASML.AS", "MC.PA");
+    }
+
+    @Test
+    void dropsDuplicateListingsOfSameCompanyWithinRegion() throws Exception {
+        // Yahoo may return the same company under a different candidate symbol;
+        // feed two AMERICAS candidates with identical normalized names.
+        when(yahooFinanceClient.getQuotes(any())).thenReturn(List.of(
+                quote("AAPL", "Apple Inc.", "3000", "USD"),
+                quote("MSFT", "Apple Inc.", "2000", "USD"), // duplicate company name
+                quote("NVDA", "Nvidia", "5000", "USD")));
+
+        Map<String, List<QuoteSummary>> regions = stockService.getTopStocksByRegion(5);
+
+        assertThat(regions.get("AMERICAS")).extracting(QuoteSummary::symbol)
+                .containsExactly("NVDA", "AAPL"); // MSFT deduped away
+    }
+
+    @Test
+    void adjustsCandlesAcrossSplits() throws Exception {
+        // 4:1 split: raw close 400, adjClose 100 → OHLC scaled by 0.25
+        HistoricalQuote preSplit = quote("2025-09-02", "400", "410", "380", "400", "100");
+        HistoricalQuote postSplit = quote("2025-09-03", "100", "105", "95", "100", "100");
+        when(yahooFinanceClient.getHistory(any(), any(), any()))
+                .thenReturn(List.of(preSplit, postSplit));
+
+        List<Candle> candles = stockService.getHistory("XYZ",
+                LocalDate.of(2025, 9, 1), LocalDate.of(2025, 9, 30));
+
+        assertThat(candles.get(0).close()).isEqualByComparingTo("100");
+        assertThat(candles.get(0).open()).isEqualByComparingTo("100");
+        assertThat(candles.get(0).high()).isEqualByComparingTo("102.5");
+        assertThat(candles.get(0).low()).isEqualByComparingTo("95");
+        assertThat(candles.get(1).close()).isEqualByComparingTo("100");
+    }
+
+    @Test
+    void preservesHolidayGapsInCandleDates() throws Exception {
+        // Sep 6-7 2025 is a weekend — candles jump Fri 5th → Mon 8th
+        when(yahooFinanceClient.getHistory(any(), any(), any())).thenReturn(List.of(
+                quote("2025-09-05", "100", "105", "95", "102"),
+                quote("2025-09-08", "103", "108", "101", "107")));
+
+        List<Candle> candles = stockService.getHistory("AAPL",
+                LocalDate.of(2025, 9, 1), LocalDate.of(2025, 9, 30));
+
+        assertThat(candles).extracting(Candle::date)
+                .containsExactly(LocalDate.of(2025, 9, 5), LocalDate.of(2025, 9, 8));
     }
 
     @Test
