@@ -20,13 +20,20 @@ flowchart LR
 
     subgraph Backend["Spring Boot :8080"]
         Ctrl["StockController<br/>/api/stocks"]
+        AgentCtrl["AgentController<br/>/api/agent/chat"]
+        AgentSvc["MarketAgentService<br/>(LangChain4j AiServices)"]
+        Tools["StockTools<br/>(@Tool methods)"]
         Svc["StockService"]
         Client_YF["YahooFinanceClient"]
         CORS["CorsConfig"]
-        DTO["DTOs<br/>Candle · QuoteSummary · SearchResult"]
+        DTO["DTOs<br/>Candle · QuoteSummary · SearchResult · ChatResponse"]
         Ctrl --> Svc --> Client_YF
-        CORS -.-> Ctrl
+        AgentCtrl --> AgentSvc --> Tools --> Svc
+        CORS -.-> Ctrl & AgentCtrl
     end
+
+    LLM["OpenAI<br/>(tool calling)"]
+    AgentSvc <-->|"prompt + tool calls"| LLM
 
     subgraph Yahoo["Yahoo Finance API"]
         V8["v8 chart<br/>(OHLC history)"]
@@ -61,10 +68,15 @@ flowchart LR
 ## 3. REST API
 
 ```
-GET /api/stocks/{ticker}/history?from=YYYY-MM-DD&to=YYYY-MM-DD   → Candle[]
-GET /api/stocks/top?limit=5                                      → QuoteSummary[]
-GET /api/stocks/search?q=keyword                                 → SearchResult[]
+GET  /api/stocks/{ticker}/history?from=YYYY-MM-DD&to=YYYY-MM-DD   → Candle[]
+GET  /api/stocks/top?limit=5                                      → QuoteSummary[]
+GET  /api/stocks/search?q=keyword                                 → SearchResult[]
+POST /api/agent/chat  {message}                                   → {message, charts[]}
 ```
+
+### AI agent
+
+`MarketAgentService` wraps a LangChain4j `AiServices` agent (OpenAI, tool calling). `StockTools` exposes three tools — `searchStocks`, `getTopStocks`, `getStockHistory` — delegating to `StockService`. When `getStockHistory` runs, the full candle series is recorded in a per-request `ThreadLocal` collector while the LLM receives only a compact summary; the controller returns both the text reply and the chart payloads so the UI can render real candlestick charts inline. The feature is disabled unless `OPENAI_API_KEY` is set (503 otherwise).
 
 ## 4. Request Flows
 

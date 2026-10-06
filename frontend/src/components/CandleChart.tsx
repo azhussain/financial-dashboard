@@ -13,9 +13,10 @@ export interface Candle {
 interface Props {
   candles: Candle[]
   symbol: string
+  height?: number
 }
 
-export default function CandleChart({ candles, symbol }: Props) {
+export default function CandleChart({ candles, symbol, height = 480 }: Props) {
   const series = [
     {
       name: symbol,
@@ -63,6 +64,6 @@ export default function CandleChart({ candles, symbol }: Props) {
   }
 
   return (
-    <Chart options={options} series={series} type="candlestick" height={480} />
+    <Chart options={options} series={series} type="candlestick" height={height} />
   )
 }

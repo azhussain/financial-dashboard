@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class YahooFinanceClient {
@@ -33,6 +34,8 @@ public class YahooFinanceClient {
     private static final String QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote";
     private static final String SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search";
 
+    private static final long QUOTE_CACHE_TTL_MS = 15_000;
+
     private final HttpClient http = HttpClient.newBuilder()
             .cookieHandler(new CookieManager())
             .connectTimeout(Duration.ofSeconds(10))
@@ -41,6 +44,11 @@ public class YahooFinanceClient {
 
     private volatile String crumb;
 
+    // Short-TTL quote cache so the dashboard and the agent read the same
+    // snapshot when they fetch within a few seconds of each other.
+    private final Map<String, QuoteSummary> quoteCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Long> quoteCacheTime = new java.util.concurrent.ConcurrentHashMap<>();
+
     public List<HistoricalQuote> getHistory(String symbol, Calendar from, Calendar to) throws IOException {
         HistQuotesQuery2V8Request request =
                 new HistQuotesQuery2V8Request(symbol.toUpperCase(), from, to, QueryInterval.DAILY);
@@ -48,17 +56,35 @@ public class YahooFinanceClient {
     }
 
     public List<QuoteSummary> getQuotes(List<String> symbols) throws IOException, InterruptedException {
-        String body = fetchQuotes(String.join(",", symbols));
-        List<QuoteSummary> quotes = new ArrayList<>();
-        for (JsonNode node : mapper.readTree(body).path("quoteResponse").path("result")) {
-            quotes.add(new QuoteSummary(
-                    node.path("symbol").asText(),
-                    node.path("shortName").asText(node.path("longName").asText()),
-                    decimal(node, "regularMarketPrice"),
-                    decimal(node, "regularMarketChangePercent"),
-                    decimal(node, "marketCap")));
+        long now = System.currentTimeMillis();
+        List<QuoteSummary> result = new ArrayList<>();
+        List<String> stale = new ArrayList<>();
+        for (String s : symbols) {
+            Long t = quoteCacheTime.get(s);
+            QuoteSummary cached = quoteCache.get(s);
+            if (cached != null && t != null && now - t < QUOTE_CACHE_TTL_MS) {
+                result.add(cached);
+            } else {
+                stale.add(s);
+            }
         }
-        return quotes;
+        if (!stale.isEmpty()) {
+            String body = fetchQuotes(String.join(",", stale));
+            for (JsonNode node : mapper.readTree(body).path("quoteResponse").path("result")) {
+                QuoteSummary q = new QuoteSummary(
+                        node.path("symbol").asText(),
+                        node.path("shortName").asText(node.path("longName").asText()),
+                        decimal(node, "regularMarketPrice"),
+                        decimal(node, "regularMarketChangePercent"),
+                        decimal(node, "marketCap"),
+                        node.path("currency").asText(null),
+                        node.hasNonNull("regularMarketTime") ? node.get("regularMarketTime").asLong() : null);
+                quoteCache.put(q.symbol(), q);
+                quoteCacheTime.put(q.symbol(), now);
+                result.add(q);
+            }
+        }
+        return result;
     }
 
     public List<SearchResult> search(String query) throws IOException, InterruptedException {
