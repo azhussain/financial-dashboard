@@ -1,5 +1,10 @@
 # Stocks Explorer — AWS deployment runbook
 
+> **Automation**: `deploy/aws-setup.sh` runs this entire runbook end-to-end and is
+> idempotent — `AWS_PROFILE=stocks-devops bash deploy/aws-setup.sh` from the repo
+> root. Use `deploy/create-devops-user.sh` first to create a scoped IAM user.
+> This document remains the manual/reference path.
+
 Copy-paste CLI steps for the split deployment: **S3 + CloudFront** serving the React SPA
 with **`/api/*` proxied to a Dockerized Spring Boot backend on EC2**. One CloudFront
 domain fronts both, so the browser talks same-origin — no CORS, no `VITE_API_BASE`.
@@ -196,7 +201,8 @@ buttons disable on closed markets, and the Virtual Agent should answer (SSM key 
    ```
 3. GitHub repo → Settings → Secrets and variables → Actions:
    - Secret `AWS_DEPLOY_ROLE_ARN` = `arn:aws:iam::${ACCOUNT_ID}:role/stocks-github-deploy`
-   - Variables `AWS_ACCOUNT_ID`, `AWS_REGION`, `ECR_REPO`, `S3_BUCKET`, `DISTRIBUTION_ID`
+   - Optional variable overrides: `AWS_REGION`, `ECR_REPO`, `S3_BUCKET`, `DISTRIBUTION_ID`
+     (unset values are resolved from AWS at runtime — only the secret is required)
 
 ## 9 · Rollback
 
