@@ -17,6 +17,8 @@ env:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_ROLE: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,14 +33,17 @@ jobs:
         working-directory: backend
 
       - uses: aws-actions/configure-aws-credentials@v4
+        if: env.DEPLOY_ROLE != ''
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - uses: aws-actions/amazon-ecr-login@v2
+        if: env.DEPLOY_ROLE != ''
         id: ecr
 
       - name: Build and push image
+        if: env.DEPLOY_ROLE != ''
         working-directory: backend
         run: |
           docker build -t $IMAGE:$GITHUB_SHA -t $IMAGE:latest .
@@ -46,6 +51,7 @@ jobs:
           docker push $IMAGE:latest
 
       - name: Rolling restart on EC2 via SSM
+        if: env.DEPLOY_ROLE != ''
         run: |
           cat > ssm-params.json <<EOF
           {"commands":[
@@ -74,6 +80,8 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_ROLE: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -90,11 +98,13 @@ jobs:
           npm run build
 
       - uses: aws-actions/configure-aws-credentials@v4
+        if: env.DEPLOY_ROLE != ''
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy to S3 and invalidate
+        if: env.DEPLOY_ROLE != ''
         run: |
           aws s3 sync frontend/dist/ s3://${{ vars.S3_BUCKET }} --delete
           aws cloudfront create-invalidation \
