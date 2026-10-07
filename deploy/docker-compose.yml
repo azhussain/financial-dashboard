@@ -1,0 +1,38 @@
+# Stage-1 agent mesh on a single EC2 node.
+#   app   — Spring Boot: gateway filter + orchestrator + workers + evaluator
+#   redis — shared state / durable audit log (agent:audit list)
+#
+# Required env (via shell or .env next to this file):
+#   OPENAI_API_KEY — enables the LLM Virtual Agent
+#   AGENT_API_KEY  — enables Bearer auth on /api/agent/** (empty = open, dev only)
+#
+# Usage:  docker compose -f deploy/docker-compose.yml up -d --build
+services:
+  app:
+    build:
+      context: ../backend
+    image: stocks-explorer-backend:latest
+    container_name: stocks-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AGENT_API_KEY: ${AGENT_API_KEY:-}
+      AUDIT_STORE: redis
+      SPRING_DATA_REDIS_HOST: redis
+    depends_on:
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:7-alpine
+    container_name: stocks-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

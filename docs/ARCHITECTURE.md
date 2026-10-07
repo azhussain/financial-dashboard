@@ -102,6 +102,10 @@ POST /api/agent/chat  {message, sessionId}                        → {message, 
 
 `MarketAgentService` wraps a LangChain4j `AiServices` agent (OpenAI, tool calling) with per-`sessionId` `MessageWindowChatMemory` (20 messages). `StockTools` exposes four tools — `searchStocks`, `getTopStocks`, `getRegionalTopStocks`, `getStockHistory` — delegating to `StockService`. When `getStockHistory` runs, the full candle series is recorded in a per-request `ThreadLocal` collector while the LLM receives only a compact summary; chart payloads are attached to the response only when the user's message explicitly asks for one. The feature is disabled unless `OPENAI_API_KEY` is set (503 otherwise).
 
+### Agent mesh (Stage 1)
+
+A task-routed agent mesh backs the LLM agent: `GatewayAuthFilter` is the auth/policy boundary on `/api/agent/**` (Bearer/`X-API-Key` when `AGENT_API_KEY` is set); `AgentOrchestratorService` accepts tasks (`POST /api/agent/tasks`), routes each `AgentTask` by type to an `AgentWorker` (`DataAgentWorker` today: quote lookup, region snapshot, manual refresh), runs results through `ResultEvaluator` (`DeterministicResultEvaluator` — schema/sanity rules; evaluator rejection requeues once, worker exceptions become `ERROR`), and records every terminal outcome to `AuditStore` (in-memory ring buffer, or a durable Redis list when `AUDIT_STORE=redis`). Results are polled via `GET /api/agent/tasks/{id}`; the trail via `GET /api/agent/tasks/audit`. `TaskQueue` mirrors SQS semantics so Stage 2 replaces the in-memory queue without touching the orchestrator.
+
 ## 4. Request Flows
 
 ### Load candlestick chart
@@ -236,6 +240,10 @@ sequenceDiagram
 | `MarketAgentServiceTest` | Chart-intent gating |
 | `StockToolsTest` | Agent tool wiring incl. regional overview |
 | `ApiSecurityTest` | `@SpringBootTest`: CORS policy, HTTP methods, injection payloads, error leakage |
+| `AgentOrchestratorServiceTest` | Task routing, evaluator retry-then-fail, worker error mapping, audit recording |
+| `DeterministicResultEvaluatorTest` | Per-type verdict rules (quote/snapshot/refresh) |
+| `GatewayAuthFilterTest` | Bearer/X-API-Key auth on `/api/agent/**`, dev pass-through, non-agent paths unguarded |
+| `AgentTaskControllerTest` | `@WebMvcTest`: submit → 202, status → 200/404, audit endpoint |
 | `App.test.tsx` | Vitest + RTL: forms, autocomplete, SSE snapshot/update/stale flows, manual refresh, details panel, tile-click behavior |
 | JaCoCo | Coverage report → `backend/target/site/jacoco/` |
 

@@ -77,6 +77,9 @@ The Vite dev server proxies `/api` requests to the backend, so no extra configur
 | `POST /api/markets/{region}/refresh` | Queue an out-of-band refresh for one region (202; 404 for unknown regions) |
 | `GET /api/health` | `{"status":"ok"}` probe |
 | `POST /api/agent/chat` `{message, sessionId}` | Virtual Agent — returns `{message, charts[]}` |
+| `POST /api/agent/tasks` `{type, payload}` | Agent mesh — submit a task → `202 {taskId}` (auth via `AGENT_API_KEY` when set) |
+| `GET /api/agent/tasks/{taskId}` | Task result — `PENDING`/`PASS`/`FAIL`/`ERROR` + payload |
+| `GET /api/agent/tasks/audit?n=` | Recent task audit entries (newest first) |
 
 `/history` response example:
 
@@ -118,6 +121,19 @@ Browser ──HTTPS──▶ CloudFront (dxxxx.cloudfront.net)
 **CI/CD**: `.github/workflows/deploy.yml` runs on push — backend tests → Docker build → ECR push → SSM rolling restart on the tagged instance; frontend tests → build → S3 sync → CloudFront invalidation. Auth is GitHub OIDC (`deploy/github-oidc-trust.json` + `github-deploy-policy.json`) — no stored AWS keys.
 
 Notes: SSE streams through CloudFront — `/api/*` uses `CachingDisabled` with compression off, and the app's 25s heartbeat sits inside CloudFront's 60s origin read timeout. Long Virtual Agent answers can still hit that timeout; a streaming chat endpoint is a planned follow-up. To protect the OpenAI quota, add an AWS WAF rate-based rule on `/api/agent/*` (e.g. 100 req/5min/IP).
+
+## Agent mesh (Stage 1)
+
+Beyond the LLM Virtual Agent, the backend hosts a task-routed agent mesh — the foundation for a gateway → orchestrator → workers → evaluator architecture:
+
+- **Gateway** — `GatewayAuthFilter` guards `/api/agent/**`; when `AGENT_API_KEY` is set, callers need `Authorization: Bearer <key>` (or `X-API-Key`). Unset = pass-through (dev).
+- **Orchestrator** — `AgentOrchestratorService` accepts `POST /api/agent/tasks`, routes by task type to the declaring worker, evaluates results, retries evaluation failures once (`MAX_ATTEMPTS=2`).
+- **Workers** — `AgentWorker` contract + `DataAgentWorker` (`QUOTE_LOOKUP`, `REGION_SNAPSHOT`, `REGION_REFRESH`). A new agent role is just a new bean declaring its `taskTypes()`.
+- **Evaluator** — `DeterministicResultEvaluator` sanity-checks worker output (positive price + currency, non-empty non-stale snapshots) before results are served; swappable for an LLM judge later.
+- **Queue** — `TaskQueue` interface, `InMemoryTaskQueue` impl — mirrors SQS semantics for a Stage-2 swap.
+- **Shared state / audit** — `AuditStore`: bounded in-memory by default, durable Redis list (`agent:audit`) when `AUDIT_STORE=redis` + `SPRING_DATA_REDIS_HOST` are set.
+
+Single-node run with Redis audit: `docker compose -f deploy/docker-compose.yml up -d --build`.
 
 ## Testing
 
