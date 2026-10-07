@@ -28,14 +28,21 @@ export default function TickerInput({ value, onChange, onSubmit }: Props) {
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
   const justSelected = useRef(false)
+  const typed = useRef(false)
 
-  // Debounced lookup as the user types.
+  // Debounced lookup as the user types. Programmatic value changes — e.g.
+  // selecting a market tile — must not trigger a search or open the dropdown.
   useEffect(() => {
     if (justSelected.current) {
-      // Skip the search triggered by programmatically setting the selected symbol.
       justSelected.current = false
       return
     }
+    if (!typed.current) {
+      setOpen(false)
+      setSuggestions([])
+      return
+    }
+    typed.current = false
     const query = value.trim()
     if (!query) {
       setSuggestions([])
@@ -96,7 +103,10 @@ export default function TickerInput({ value, onChange, onSubmit }: Props) {
         aria-autocomplete="list"
         aria-controls="ticker-suggestions"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          typed.current = true
+          onChange(e.target.value)
+        }}
         onKeyDown={onKeyDown}
         onFocus={() => suggestions.length > 0 && setOpen(true)}
         onBlur={() => setOpen(false)}

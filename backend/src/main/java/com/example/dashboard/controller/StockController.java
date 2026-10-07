@@ -51,6 +51,19 @@ public class StockController {
         }
     }
 
+    @GetMapping("/{symbol}/quote")
+    public ResponseEntity<?> getQuote(@PathVariable String symbol) {
+        try {
+            return ResponseEntity.ok(stockService.getQuote(symbol));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Failed to fetch quote for {}", symbol, e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to fetch stock data"));
+        }
+    }
+
     @GetMapping("/top")
     public ResponseEntity<?> getTopStocks(
             @RequestParam(defaultValue = "5") int limit) {

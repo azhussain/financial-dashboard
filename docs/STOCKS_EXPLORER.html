@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stocks Explorer — Solution Reference</title>
+<style>
+  :root {
+    --ink: #1a2332; --muted: #5b6b7f; --accent: #0e9f6e; --accent-dark: #047857;
+    --line: #e3e8ef; --card: #ffffff; --bg: #f6f8fb; --code-bg: #0f172a;
+    --warn: #b45309; --warn-bg: #fef3c7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.65;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px 80px; }
+  nav {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+  }
+  nav .wrap { display: flex; gap: 18px; align-items: center; padding: 12px 28px; flex-wrap: wrap; }
+  nav .brand { font-weight: 700; margin-right: auto; }
+  nav a { color: var(--muted); text-decoration: none; font-size: 13px; }
+  nav a:hover { color: var(--accent-dark); }
+  header.hero { padding: 56px 0 32px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--accent-dark);
+    background: #e6f6f0; border: 1px solid #bfe8d8; padding: 4px 12px; border-radius: 999px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(14,159,110,.2); }
+  h1 { font-size: 40px; letter-spacing: -0.02em; margin-top: 18px; }
+  .sub { color: var(--muted); font-size: 17px; margin-top: 12px; max-width: 760px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+  .badge {
+    font-size: 12px; font-weight: 600; color: var(--muted); background: var(--card);
+    border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px;
+  }
+  section { margin-top: 56px; }
+  h2 { font-size: 24px; letter-spacing: -0.01em; padding-bottom: 10px; border-bottom: 2px solid var(--accent); display: inline-block; }
+  h3 { font-size: 16px; margin: 28px 0 8px; color: var(--ink); }
+  p { margin: 12px 0; color: #33404f; }
+  ul { margin: 10px 0 10px 22px; color: #33404f; }
+  li { margin: 5px 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; margin-top: 16px; }
+  .grid { display: grid; gap: 14px; margin-top: 16px; }
+  .grid.cols3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .grid .card { margin-top: 0; }
+  .card h4 { font-size: 14px; margin-bottom: 6px; }
+  .card p, .card li { font-size: 13.5px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13.5px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--line); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  code, .mono { font-family: "SF Mono", "Cascadia Code", Consolas, monospace; font-size: .9em; }
+  td code, p code, li code { background: #eef2f7; border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+  .pill.get { background: #e0f2fe; color: #0369a1; }
+  .pill.post { background: #fef3c7; color: #92400e; }
+  .pill.sse { background: #e6f6f0; color: #047857; }
+  .flow { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+  .step {
+    flex: 1 1 130px; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px; text-align: center; font-size: 13px; font-weight: 600; position: relative;
+  }
+  .step small { display: block; font-weight: 400; color: var(--muted); margin-top: 5px; font-size: 12px; }
+  .arrow { align-self: center; color: var(--accent); font-weight: 700; font-size: 18px; }
+  .note {
+    margin-top: 16px; padding: 12px 16px; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+    background: #eef7f3; font-size: 13.5px; color: #1f4d3f;
+  }
+  .note.warn { border-color: var(--warn); background: var(--warn-bg); color: #7c4a03; }
+  .arch { background: var(--code-bg); border-radius: 12px; padding: 24px; margin-top: 16px; color: #cbd5e1; font-size: 13px; overflow-x: auto; }
+  .arch pre { font-family: "SF Mono", Consolas, monospace; font-size: 12.5px; line-height: 1.7; }
+  .timeline { border-left: 2px solid var(--line); margin: 18px 0 0 6px; padding-left: 22px; }
+  .timeline .item { position: relative; padding-bottom: 18px; }
+  .timeline .item::before {
+    content: ""; position: absolute; left: -28px; top: 6px; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 2px var(--line);
+  }
+  .timeline .num { font-size: 11px; font-weight: 700; color: var(--accent-dark); text-transform: uppercase; letter-spacing: .05em; }
+  .timeline .t { font-weight: 600; font-size: 14px; }
+  .timeline .d { font-size: 13px; color: var(--muted); }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <span class="brand">Stocks Explorer</span>
+    <a href="#overview">Overview</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#pipeline">Live Data</a>
+    <a href="#cadence">Cadence</a>
+    <a href="#api">API</a>
+    <a href="#agent">Virtual Agent</a>
+    <a href="#security">Security</a>
+    <a href="#deployment">Deployment</a>
+    <a href="#journey">Build Journey</a>
+    <a href="#limitations">Limitations</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<header class="hero">
+  <span class="eyebrow"><span class="dot"></span> Solution Reference · Business &amp; Technical</span>
+  <h1>Stocks Explorer</h1>
+  <p class="sub">
+    A live global market dashboard: the top 20 stocks across the Americas, APAC, and EMEA,
+    refreshed automatically on a market-hours-aware schedule and pushed to dashboards
+    the moment values change — plus interactive candlestick charts and an AI-powered
+    Virtual Agent for stock insights.
+  </p>
+  <div class="badges">
+    <span class="badge">Java 17 · Spring Boot 3.5</span>
+    <span class="badge">React 19 · TypeScript · Vite · Tailwind</span>
+    <span class="badge">Yahoo Finance data</span>
+    <span class="badge">SSE push updates</span>
+    <span class="badge">LangChain4j + OpenAI</span>
+    <span class="badge">Docker · Cloudflare-ready</span>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>1 · What it does</h2>
+  <p>For business: Stocks Explorer is a watchlist-first market monitor. Three regional
+  columns show each market's twenty largest companies with live prices in local currency.
+  Clicking a stock opens a details panel with a candlestick chart and key metrics.
+  A floating Virtual Agent answers questions — comparisons, "where do I invest $X",
+  price explanations — using the same live data the dashboard shows.</p>
+  <div class="grid cols3">
+    <div class="card">
+      <h4>Live regional watchlists</h4>
+      <p>Top 20 per region by USD-normalized market cap. Currency chips, market status,
+      last-updated time, STALE markers, and per-region refresh buttons.</p>
+    </div>
+    <div class="card">
+      <h4>Push, not poll</h4>
+      <p>A backend Markets Agent refreshes on a shared schedule and pushes only what
+      changed over server-sent events. Unchanged rows never re-render.</p>
+    </div>
+    <div class="card">
+      <h4>AI Virtual Agent</h4>
+      <p>Floating chat (bottom-right) grounded in live quotes and history; per-tab
+      conversation memory; charts only on request; local-currency pricing.</p>
+    </div>
+  </div>
+</section>
+
+<section id="architecture">
+  <h2>2 · Architecture</h2>
+  <p>The system is two deployables: a static React SPA and a Spring Boot service.
+  The SPA reads on-demand data over REST and live market data over SSE. The backend
+  owns all Yahoo Finance access — the browser never talks to Yahoo or OpenAI directly.</p>
+  <div class="arch"><pre>
+  Browser                          Spring Boot backend                    External
+  ┌────────────────────┐          ┌───────────────────────────┐         ┌──────────────┐
+  │ TopStocks          │◄── SSE ──│ MarketStreamController    │         │              │
+  │ (watchlists)       │          │   /api/markets/stream     │         │  Yahoo       │
+  │ StockDetails       │── REST ──│ StockController           │         │  Finance     │
+  │ TickerInput        │          │ AgentController           │         │  (quotes,    │
+  │ AgentChat          │── REST ──│ HealthController          │         │   candles,   │
+  └────────────────────┘          └────┬──────────┬───────────┘         │   search)    │
+                                     │          │                       └──────▲───────┘
+              ┌────────────────────────┤          │                            │
+              ▼                        ▼          ▼                            │
+        ┌───────────┐   ┌──────────────────┐   ┌──────────────┐    ┌───────────┴───┐
+        │ MarketAgent│   │ MarketsAgentSvc  │   │ StockService │───▶│YahooFinance  │
+        │ Service    │   │ (scheduler+SSE)  │   │              │    │Client        │
+        │ (LLM chat) │   └───┬──────────┬───┘   └──────────────┘    └──────────────┘
+        └───────────┘       │          │           ▲                          ▲
+                           ▼          ▼           │                          │
+                    ┌──────────┐  ┌──────────┐    │               LangChain4j │
+                    │MarketData│  │ Regional │────┘               OpenAI      │
+                    │  Cache   │  │ Workers  │                    tool calls  │
+                    │(diff+meta)│ │US·EU·APAC│                            │
+                    └──────────┘  └──────────┘
+  </pre></div>
+  <table>
+    <tr><th>Layer</th><th>Component</th><th>Responsibility</th></tr>
+    <tr><td>Frontend</td><td><code>TopStocks</code></td><td>SSE-driven regional watchlists: memoized rows, STALE/closed badges, freshness timestamp, per-region refresh button.</td></tr>
+    <tr><td>Frontend</td><td><code>StockDetails</code></td><td>Google-Finance-style panel: live price header, market status, range chips, candlestick chart, stats grid.</td></tr>
+    <tr><td>Frontend</td><td><code>TickerInput</code></td><td>Debounced autocomplete combobox; searches only on real typing (never on programmatic value changes).</td></tr>
+    <tr><td>Frontend</td><td><code>AgentChat</code></td><td>Floating Virtual Agent widget; per-tab <code>sessionId</code> conversation.</td></tr>
+    <tr><td>Backend</td><td><code>MarketsAgentService</code></td><td>Shared scheduler (per-region loops, bounded backoff, no overlap), refresh → cache → publish, SSE registry, heartbeat.</td></tr>
+    <tr><td>Backend</td><td><code>MarketDataCache</code></td><td>Latest valid snapshot per region; returns changed-only diffs; retains + marks stale on failure.</td></tr>
+    <tr><td>Backend</td><td><code>RegionalMarketWorker</code></td><td>Region contract: <code>region()</code>, <code>candidates()</code>, <code>tradingWindows()</code>. Implementations: Americas, EMEA, APAC.</td></tr>
+    <tr><td>Backend</td><td><code>StockService</code></td><td>History, quotes, search, USD-normalized ranking, candidate pools.</td></tr>
+    <tr><td>Backend</td><td><code>YahooFinanceClient</code></td><td>All Yahoo calls: v8 history (library), v7 quotes (cookie+crumb), v1 search; 15s quote cache.</td></tr>
+    <tr><td>Backend</td><td><code>MarketAgentService</code></td><td>LangChain4j agent: tool calling, per-session memory, chart-intent gating.</td></tr>
+  </table>
+</section>
+
+<section id="pipeline">
+  <h2>3 · The live-data pipeline (Markets Agent)</h2>
+  <p>Every cycle, each regional worker runs the same five-stage pipeline. One shared
+  schedule serves all viewers — nobody's browser triggers its own Yahoo calls.</p>
+  <div class="flow">
+    <div class="step">1 · Fetch<small>full candidate pool (~25/region), one batched call</small></div>
+    <div class="arrow">→</div>
+    <div class="step">2 · Rank<small>USD-normalized market cap, same-company dedupe, top 20</small></div>
+    <div class="arrow">→</div>
+    <div class="step">3 · Diff<small>displayed fields vs cached snapshot</small></div>
+    <div class="arrow">→</div>
+    <div class="step">4 · Store<small>RegionSnapshot: quotes + freshness + marketOpen</small></div>
+    <div class="arrow">→</div>
+    <div class="step">5 · Publish<small>SSE market-update: changed rows + rank order only</small></div>
+  </div>
+  <h3>Why this shape</h3>
+  <ul>
+    <li><strong>Full-pool refresh</strong> — re-ranking the entire candidate list each cycle lets a new company displace the incumbent top 20; refreshing only the current 20 could never detect that.</li>
+    <li><strong>Diff-then-publish</strong> — unchanged prices produce an event with an empty <code>changed[]</code>; React merges by symbol with identity-preserved objects + memoized rows, so unchanged UI does zero work.</li>
+    <li><strong>Failure-proof</strong> — a failed refresh calls <code>applyFailure</code>, which retains last-good quotes and marks the snapshot <code>stale</code>. Bad or partial responses can never overwrite valid data. Backoff is bounded (30s → 5&nbsp;min cap).</li>
+    <li><strong>Reconnect-safe</strong> — new SSE subscribers immediately get a <code>snapshot</code> event with the entire cache; a 25s heartbeat keeps proxies from idling the stream.</li>
+  </ul>
+  <div class="note">SSE event shapes — <code>snapshot</code>: <code>{REGION: RegionSnapshot}</code> · <code>market-update</code>: <code>{region, lastSuccessAt, lastAttemptAt, stale, consecutiveFailures, changed[], order[], marketOpen}</code>.</div>
+</section>
+
+<section id="cadence">
+  <h2>4 · Adaptive cadence</h2>
+  <p>Polling a closed market every five minutes wastes calls and yields nothing.
+  Each worker declares the trading sessions of the exchanges it covers; a region
+  is "open" while <em>any</em> window is in session. Cadence follows the market:</p>
+  <table>
+    <tr><th>Region</th><th>Covered sessions (local)</th><th>Open cadence</th><th>Closed cadence</th></tr>
+    <tr><td>AMERICAS</td><td>NYSE/Nasdaq/TSX — 9:30–16:00 ET, Mon–Fri</td><td>5 min</td><td>30 min</td></tr>
+    <tr><td>APAC</td><td>Tokyo 9:00–15:00 · Hong Kong 9:30–16:00 · Seoul 9:00–15:30 · Taipei 9:00–13:30 · Sydney 10:00–16:00, Mon–Fri</td><td>5 min</td><td>30 min</td></tr>
+    <tr><td>EMEA</td><td>Continental Europe 9:00–17:30, Mon–Fri · Tadawul 10:00–15:00, <strong>Sun–Thu</strong></td><td>5 min</td><td>30 min</td></tr>
+  </table>
+  <p>Closed ≠ ignored: a reduced 30-minute cadence still tracks pre/post-market moves
+  and lets a region discover "open" on its next pass. The UI reflects state with a
+  <code>closed</code> chip and a disabled refresh button; manual refresh otherwise
+  bypasses the cadence entirely.</p>
+  <div class="note warn">Exchange holidays aren't modeled — on a holiday the agent polls at open cadence and simply finds unchanged values. Adding a holiday calendar per exchange is a documented enhancement.</div>
+</section>
+
+<section id="api">
+  <h2>5 · API surface</h2>
+  <table>
+    <tr><th></th><th>Endpoint</th><th>Returns</th></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/stocks/{symbol}/history?from=&amp;to=</code></td><td>Split-adjusted OHLC candles (UTC dates, inclusive end)</td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/stocks/{symbol}/quote</code></td><td>QuoteSummary — price, change%, marketCap, currency, exchange, marketState, marketTime</td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/stocks/top?limit=</code></td><td>Top N US stocks by market cap</td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/stocks/markets?limit=</code></td><td>Top N per region (legacy; SSE is the live path)</td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/stocks/search?q=</code></td><td>Up to 8 US equities (filtered server-side)</td></tr>
+    <tr><td><span class="pill sse">SSE</span></td><td><code>/api/markets/stream</code></td><td><code>snapshot</code> on connect; <code>market-update</code> diffs; heartbeat</td></tr>
+    <tr><td><span class="pill post">POST</span></td><td><code>/api/markets/{region}/refresh</code></td><td>202 queued · 404 unknown region</td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/health</code></td><td><code>{"status":"ok"}</code></td></tr>
+    <tr><td><span class="pill post">POST</span></td><td><code>/api/agent/chat</code> <code>{message, sessionId}</code></td><td><code>{message, charts[]}</code> · 503 without OPENAI_API_KEY</td></tr>
+  </table>
+</section>
+
+<section id="agent">
+  <h2>6 · The Virtual Agent</h2>
+  <p>A genuinely agentic component: LangChain4j <code>AiServices</code> + OpenAI tool
+  calling. The model plans its own tool usage, grounds every number in a fresh fetch,
+  and answers in markdown bullets.</p>
+  <div class="grid cols3">
+    <div class="card"><h4>Tools</h4><p><code>searchStocks</code> · <code>getTopStocks</code> · <code>getRegionalTopStocks</code> · <code>getStockHistory</code> — all over the same StockService the dashboard uses.</p></div>
+    <div class="card"><h4>Memory</h4><p>Per-<code>sessionId</code> 20-message window; the browser sends a UUID kept in <code>sessionStorage</code>, so each tab is an isolated conversation.</p></div>
+    <div class="card"><h4>Charts on demand</h4><p>Tool-collected candle series attach to the reply only when the message asks for a chart/graph/plot/candlestick — a 300-word answer stays text.</p></div>
+  </div>
+  <ul>
+    <li>Local-currency pricing (SAR, KRW, €, ¥…) with approximate USD conversion against stated budgets.</li>
+    <li>Investment-style answers include a "not financial advice" disclaimer by prompt contract.</li>
+    <li>ThreadLocal chart collector keeps the LLM context small while the UI gets full candle series.</li>
+  </ul>
+</section>
+
+<section id="security">
+  <h2>7 · Security &amp; resilience</h2>
+  <ul>
+    <li><strong>Secrets</strong> — <code>OPENAI_API_KEY</code> is env-only (<code>${OPENAI_API_KEY:}</code> in properties); nothing secret is in the repo. No key → agent returns 503, everything else works.</li>
+    <li><strong>CORS</strong> — <code>CORS_ALLOWED_ORIGINS</code> env allowlist; dev default <code>localhost:5173</code>.</li>
+    <li><strong>Error hygiene</strong> — internal exceptions logged, never echoed; generic <code>{"error"}</code> bodies; verified by <code>ApiSecurityTest</code> (injection payloads, unknown endpoints, leak checks).</li>
+    <li><strong>Quota protection</strong> — recommend a WAF/rate-limit on <code>POST /api/agent/chat</code> (e.g., 10 req/min/IP) at the Cloudflare edge.</li>
+    <li><strong>Staleness over wrongness</strong> — outages surface as STALE badges + retained data, never silently swapped values.</li>
+    <li><strong>Yahoo quirks handled</strong> — browser User-Agent required (429 otherwise); cookie+crumb for quote endpoints with auto-refresh on 401/403.</li>
+  </ul>
+</section>
+
+<section id="deployment">
+  <h2>8 · Deployment</h2>
+  <p>Split deploy: the JVM can't run on Cloudflare's edge, so the static frontend goes to
+  <strong>Cloudflare Pages</strong> and the backend runs as a <strong>Docker container</strong>
+  (Fly.io/Render/Railway/VPS) behind a Cloudflare-proxied <code>api.</code> subdomain.</p>
+  <div class="grid cols3">
+    <div class="card"><h4>Frontend → Pages</h4><p>Build <code>npm run build</code> in <code>frontend/</code>, output <code>dist</code>. Set <code>VITE_API_BASE=https://api.yourdomain.com</code>; <code>public/_redirects</code> provides SPA fallback.</p></div>
+    <div class="card"><h4>Backend → container</h4><p>Multi-stage <code>Dockerfile</code> (Maven → Temurin JRE). Env: <code>OPENAI_API_KEY</code>, <code>CORS_ALLOWED_ORIGINS</code>, <code>PORT</code>. Probe: <code>/api/health</code>.</p></div>
+    <div class="card"><h4>Edge</h4><p>Orange-cloud <code>api.</code> DNS; WAF rate-limit on the agent endpoint; SSE streams through Cloudflare — heartbeat keeps the connection warm.</p></div>
+  </div>
+</section>
+
+<section id="journey">
+  <h2>9 · How it was built — iterations</h2>
+  <div class="timeline">
+    <div class="item"><span class="num">1</span> <span class="t">Basic dashboard</span><div class="d">Ticker + dates → candlestick via Yahoo v8; UA workaround for 429s.</div></div>
+    <div class="item"><span class="num">2</span> <span class="t">Tests &amp; hardening</span><div class="d">JUnit/MockMvc/security suite, JaCoCo; mockable YahooFinanceClient; generic 500s.</div></div>
+    <div class="item"><span class="num">3</span> <span class="t">Top-5 panel</span><div class="d">Live market-cap ranking; cookie+crumb quote flow.</div></div>
+    <div class="item"><span class="num">4</span> <span class="t">Autocomplete</span><div class="d">Debounced search, US-equity filtering, ARIA combobox.</div></div>
+    <div class="item"><span class="num">5</span> <span class="t">AI agent</span><div class="d">LangChain4j AiServices + tool calling; structured chart payloads.</div></div>
+    <div class="item"><span class="num">6–7</span> <span class="t">Modern UX</span><div class="d">KPI strip, presets, skeletons, tabular-nums; split-screen, then floating widget.</div></div>
+    <div class="item"><span class="num">8–9</span> <span class="t">Regions</span><div class="d">Collapsible details; Americas/EMEA/APAC watchlists; currency field.</div></div>
+    <div class="item"><span class="num">10</span> <span class="t">Virtual Agent</span><div class="d">Memory, bullets, charts-on-request, local currencies.</div></div>
+    <div class="item"><span class="num">11</span> <span class="t">Correctness pass</span><div class="d">USD-normalized ranking, dedupe, split-adjusted UTC candles, quote cache, race guard, per-session memory.</div></div>
+    <div class="item"><span class="num">12</span> <span class="t">Top-20 + branding</span><div class="d">Expanded pools, scrollable columns, hero/footer, Cloudflare deploy readiness.</div></div>
+    <div class="item"><span class="num">13</span> <span class="t">Markets Agent + SSE</span><div class="d">Worker abstraction, shared cache + diffing, change-only publish, STALE retention, manual refresh.</div></div>
+    <div class="item"><span class="num">14</span> <span class="t">Stock details redesign</span><div class="d">Google-Finance-style panel, quote endpoint, preset chips, stats grid.</div></div>
+    <div class="item"><span class="num">15</span> <span class="t">Adaptive cadence</span><div class="d">TradingWindow-driven open/closed polling (5m/30m), marketOpen metadata → UI.</div></div>
+  </div>
+</section>
+
+<section id="limitations">
+  <h2>10 · Known limitations &amp; roadmap</h2>
+  <table>
+    <tr><th>Limitation</th><th>Impact</th><th>Mitigation / next step</th></tr>
+    <tr><td>Yahoo Finance is unofficial</td><td>Rate limits / behavior changes possible</td><td>Crumb+UA handled; backoff + STALE on failure; a licensed feed is the eventual upgrade</td></tr>
+    <tr><td>No holiday calendars</td><td>Holiday polling at open cadence (harmless, wasteful)</td><td>Add per-exchange holiday lists to TradingWindow</td></tr>
+    <tr><td>In-memory cache &amp; chat memory</td><td>Single-replica only; restart = cold cache</td><td>Externalize to Redis/KV when scaling out</td></tr>
+    <tr><td>Candidate pools are curated</td><td>Not a true index screen; fast risers outside the pool missed</td><td>Periodic full-index screen or pool-expansion heuristic</td></tr>
+    <tr><td>Agent latency vs proxy timeout</td><td>Long LLM answers can approach ~100s edge limits</td><td>Stream chat responses (SSE) like the markets feed</td></tr>
+    <tr><td>~1.2 MB JS bundle</td><td>ApexCharts weight on first paint</td><td>Code-split the chart component</td></tr>
+  </table>
+  <h3>Test coverage</h3>
+  <p>57 backend tests (cache diffing, adaptive cadence, backoff, endpoint contracts, security/injection)
+  and 17 frontend tests (SSE snapshot/update/stale flows, manual refresh, closed-market disable,
+  details panel, autocomplete, race guards).</p>
+</section>
+
+<footer>
+  <p><strong>Stocks Explorer</strong> — powered by Yahoo Finance · Virtual Agent by LangChain4j + OpenAI</p>
+  <p style="margin-top:6px">Market data may be delayed or inaccurate; this document and the product are informational only, not investment advice.
+  Contact: <a href="mailto:gse@gmail.com" style="color:var(--accent-dark)">gse@gmail.com</a></p>
+</footer>
+
+</div>
+</body>
+</html>
