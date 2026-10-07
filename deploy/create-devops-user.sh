@@ -4,8 +4,9 @@
 # Prereq: AWS CLI configured with admin-level credentials.
 set -euo pipefail
 
-# Git Bash/MSYS arg mangling guard (harmless on Linux/macOS).
-export MSYS2_ARG_CONV_EXCL='/*'
+# Git Bash/MSYS arg mangling guard — scoped to aws calls only, so other
+# tools (npm etc.) keep normal path conversion.
+aws() { MSYS_NO_PATHCONV=1 command aws "$@"; }
 
 USER_NAME="${1:-stocks-devops}"
 REGION="${2:-us-east-1}"
@@ -32,7 +33,8 @@ cat > "${POLICY_FILE}" <<'EOF'
         "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
         "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile",
         "iam:CreateOpenIDConnectProvider", "iam:GetOpenIDConnectProvider",
-        "iam:DeleteOpenIDConnectProvider", "iam:ListRoles", "iam:PassRole"
+        "iam:DeleteOpenIDConnectProvider", "iam:ListOpenIDConnectProviders",
+        "iam:ListRoles", "iam:PassRole"
       ],
       "Resource": "*"
     },

@@ -11,9 +11,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Git Bash/MSYS rewrites arguments that look like Unix paths ("/x/y" →
-# "C:/Program Files/Git/x/y"), which corrupts SSM parameter names.
-# '/*' exempts every leading-slash arg; file:// args are unaffected.
-export MSYS2_ARG_CONV_EXCL='/*'
+# "C:/Program Files/Git/x/y"), corrupting SSM parameter names and AMI
+# alias lookups. Wrap aws so MSYS_NO_PATHCONV applies ONLY to aws calls —
+# a global export breaks npm, which relies on path conversion.
+aws() { MSYS_NO_PATHCONV=1 command aws "$@"; }
 
 export APP=$(echo "stocks-explorer" | tr -d '\r')
 export REGION="${AWS_REGION:-us-east-1}"
@@ -108,7 +109,13 @@ echo "==> S3 bucket ${BUCKET} (private, versioned)"
 
 # ---------- 7 · Frontend build + upload ----------
 if [ -d frontend ]; then
-  (cd frontend && npm ci --silent && npm run build --silent)
+  if [ -d frontend/node_modules ]; then
+    # Build from existing deps — npm ci wipes node_modules, which fails
+    # on Windows while a dev server holds native bindings.
+    (cd frontend && npm run build)
+  else
+    (cd frontend && npm ci && npm run build)
+  fi
   aws s3 sync frontend/dist/ "s3://${BUCKET}" --delete
   echo "==> frontend/dist synced to s3://${BUCKET}"
 fi
@@ -146,9 +153,11 @@ aws s3api put-bucket-policy --bucket "$BUCKET" --policy "${BUCKET_POLICY}"
 echo "==> Bucket policy attached (OAC-only access)"
 
 # ---------- 10 · GitHub OIDC + deploy role ----------
-aws iam list-open-id-connect-providers \
-  --query "OpenIDConnectProviderList[?ends_with(Arn,'token.actions.githubusercontent.com')]" \
-  --output text | grep -q githubusercontent \
+# get-by-ARN works with iam:GetOpenIDConnectProvider; ListOpenIDConnectProviders
+# isn't in the devops policy and a failed list would wrongly trigger create.
+OIDC_ARN="arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
+aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$OIDC_ARN" \
+  >/dev/null 2>&1 \
   || aws iam create-open-id-connect-provider \
        --url https://token.actions.githubusercontent.com \
        --client-id-list sts.amazonaws.com \
