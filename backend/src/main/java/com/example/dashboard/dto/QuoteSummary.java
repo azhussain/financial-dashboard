@@ -9,6 +9,8 @@ public record QuoteSummary(
         BigDecimal changePercent,
         BigDecimal marketCap,
         String currency,
-        Long marketTime
+        Long marketTime,
+        String exchange,
+        String marketState
 ) {
 }

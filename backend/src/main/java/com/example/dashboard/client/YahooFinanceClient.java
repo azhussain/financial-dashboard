@@ -78,7 +78,9 @@ public class YahooFinanceClient {
                         decimal(node, "regularMarketChangePercent"),
                         decimal(node, "marketCap"),
                         node.path("currency").asText(null),
-                        node.hasNonNull("regularMarketTime") ? node.get("regularMarketTime").asLong() : null);
+                        node.hasNonNull("regularMarketTime") ? node.get("regularMarketTime").asLong() : null,
+                        node.path("fullExchangeName").asText(node.path("exchange").asText(null)),
+                        node.path("marketState").asText(null));
                 quoteCache.put(q.symbol(), q);
                 quoteCacheTime.put(q.symbol(), now);
                 result.add(q);

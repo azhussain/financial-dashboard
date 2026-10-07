@@ -107,7 +107,8 @@ class StockControllerTest {
     void returnsTopStocks() throws Exception {
         when(stockService.getTopStocks(5)).thenReturn(List.of(
                 new com.example.dashboard.dto.QuoteSummary("NVDA", "NVIDIA Corporation",
-                        new BigDecimal("238.90"), new BigDecimal("2.12"), new BigDecimal("5770000000000"), "USD", null)));
+                        new BigDecimal("238.90"), new BigDecimal("2.12"), new BigDecimal("5770000000000"), "USD", null,
+                        "NasdaqGS", "REGULAR")));
 
         mockMvc.perform(get("/api/stocks/top"))
                 .andExpect(status().isOk())
@@ -116,12 +117,40 @@ class StockControllerTest {
     }
 
     @Test
+    void returnsQuoteForSymbol() throws Exception {
+        when(stockService.getQuote("AAPL")).thenReturn(
+                new com.example.dashboard.dto.QuoteSummary("AAPL", "Apple Inc.",
+                        new BigDecimal("332.89"), new BigDecimal("-0.24"),
+                        new BigDecimal("4860000000000"), "USD", 1_700_000_000L,
+                        "NasdaqGS", "REGULAR"));
+
+        mockMvc.perform(get("/api/stocks/AAPL/quote"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.symbol").value("AAPL"))
+                .andExpect(jsonPath("$.currency").value("USD"))
+                .andExpect(jsonPath("$.marketState").value("REGULAR"))
+                .andExpect(jsonPath("$.marketCap").value(4860000000000L));
+    }
+
+    @Test
+    void returns400ForUnknownQuoteSymbol() throws Exception {
+        when(stockService.getQuote("NOPE"))
+                .thenThrow(new IllegalArgumentException("Unknown ticker symbol: NOPE"));
+
+        mockMvc.perform(get("/api/stocks/NOPE/quote"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Unknown ticker symbol: NOPE"));
+    }
+
+    @Test
     void returnsTopStocksByRegion() throws Exception {
         when(stockService.getTopStocksByRegion(5)).thenReturn(Map.of(
                 "AMERICAS", List.of(new com.example.dashboard.dto.QuoteSummary("NVDA", "NVIDIA",
-                        new BigDecimal("238.90"), new BigDecimal("2.12"), new BigDecimal("5770000000000"), "USD", 1_700_000_000L)),
+                        new BigDecimal("238.90"), new BigDecimal("2.12"), new BigDecimal("5770000000000"), "USD", 1_700_000_000L,
+                        "NasdaqGS", "REGULAR")),
                 "APAC", List.of(new com.example.dashboard.dto.QuoteSummary("0700.HK", "Tencent",
-                        new BigDecimal("610"), new BigDecimal("1.5"), new BigDecimal("5600000000000"), "HKD", 1_700_000_000L))));
+                        new BigDecimal("610"), new BigDecimal("1.5"), new BigDecimal("5600000000000"), "HKD", 1_700_000_000L,
+                        "Hong Kong Stock Exchange", "REGULAR"))));
 
         mockMvc.perform(get("/api/stocks/markets"))
                 .andExpect(status().isOk())

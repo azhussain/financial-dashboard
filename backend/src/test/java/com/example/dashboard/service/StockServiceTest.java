@@ -113,12 +113,13 @@ class StockServiceTest {
 
     private QuoteSummary quote(String symbol, String name, String marketCap, String currency) {
         return new QuoteSummary(symbol, name, BigDecimal.TEN, BigDecimal.ONE,
-                marketCap == null ? null : new BigDecimal(marketCap), currency, 1_700_000_000L);
+                marketCap == null ? null : new BigDecimal(marketCap), currency, 1_700_000_000L,
+                "NasdaqGS", "REGULAR");
     }
 
     private QuoteSummary fx(String symbol, String price) {
         return new QuoteSummary(symbol, symbol, new BigDecimal(price), BigDecimal.ZERO,
-                null, "USD", 1_700_000_000L);
+                null, "USD", 1_700_000_000L, null, null);
     }
 
     @Test

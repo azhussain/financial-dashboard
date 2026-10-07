@@ -19,6 +19,7 @@ import java.util.Comparator;
 import java.util.GregorianCalendar;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,7 +40,7 @@ public class StockService {
                 "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META",
                 "AVGO", "TSLA", "BRK-B", "LLY", "JPM", "V", "WMT", "XOM",
                 "MA", "COST", "HD", "NFLX", "PG", "CRM", "ORCL", "AMD",
-                "RY.TO", "PBR"));
+                "RY.TO", "TD.TO", "PBR", "ITUB", "BSBR"));
         m.put("EMEA", List.of(
                 "2222.SR", "MC.PA", "ASML.AS", "NESN.SW", "NOVO-B.CO", "ROG.SW",
                 "SAP.DE", "OR.PA", "SIE.DE", "AIR.PA", "SAN.PA", "SU.PA",
@@ -110,6 +111,25 @@ public class StockService {
                 .toList();
     }
 
+    public QuoteSummary getQuote(String symbol) throws IOException, InterruptedException {
+        String sym = symbol.trim().toUpperCase();
+        return yahooFinanceClient.getQuotes(List.of(sym)).stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown ticker symbol: " + sym));
+    }
+
+    public List<String> regionCandidates(String region) {
+        return REGION_CANDIDATES.getOrDefault(region, List.of());
+    }
+
+    /** Fetch and rank an arbitrary candidate pool by USD-normalized market cap. */
+    public List<QuoteSummary> rankCandidates(List<String> symbols, int limit)
+            throws IOException, InterruptedException {
+        List<QuoteSummary> quotes = yahooFinanceClient.getQuotes(symbols);
+        Map<String, BigDecimal> usdRates = fetchUsdRates(currenciesOf(quotes));
+        return rankAndLimit(quotes.stream(), usdRates, limit);
+    }
+
     public Map<String, List<QuoteSummary>> getTopStocksByRegion(int limit)
             throws IOException, InterruptedException {
         List<String> all = REGION_CANDIDATES.values().stream()
@@ -121,27 +141,35 @@ public class StockService {
 
         // Yahoo reports market cap in each listing's local currency; normalize
         // to USD so rankings compare like-for-like across currencies.
-        Set<String> currencies = bySymbol.values().stream()
+        Map<String, BigDecimal> usdRates = fetchUsdRates(currenciesOf(bySymbol.values()));
+
+        Map<String, List<QuoteSummary>> result = new LinkedHashMap<>();
+        REGION_CANDIDATES.forEach((region, symbols) ->
+                result.put(region, rankAndLimit(
+                        symbols.stream().map(bySymbol::get).filter(Objects::nonNull),
+                        usdRates, limit)));
+        return result;
+    }
+
+    private List<QuoteSummary> rankAndLimit(
+            java.util.stream.Stream<QuoteSummary> quotes,
+            Map<String, BigDecimal> usdRates, int limit) {
+        Set<String> seenCompanies = new LinkedHashSet<>();
+        return quotes
+                .filter(q -> q.marketCap() != null)
+                // drop duplicate listings of the same company within a region
+                .filter(q -> seenCompanies.add(normalizeName(q.name())))
+                .sorted(Comparator.comparing(q -> marketCapUsd(q, usdRates),
+                        Comparator.reverseOrder()))
+                .limit(limit)
+                .toList();
+    }
+
+    private static Set<String> currenciesOf(java.util.Collection<QuoteSummary> quotes) {
+        return quotes.stream()
                 .map(QuoteSummary::currency)
                 .filter(c -> c != null && !"USD".equals(c))
                 .collect(Collectors.toSet());
-        Map<String, BigDecimal> usdRates = fetchUsdRates(currencies);
-
-        Map<String, List<QuoteSummary>> result = new LinkedHashMap<>();
-        REGION_CANDIDATES.forEach((region, symbols) -> {
-            Set<String> seenCompanies = new java.util.HashSet<>();
-            result.put(region, symbols.stream()
-                    .map(bySymbol::get)
-                    .filter(Objects::nonNull)
-                    .filter(q -> q.marketCap() != null)
-                    // drop duplicate listings of the same company within a region
-                    .filter(q -> seenCompanies.add(normalizeName(q.name())))
-                    .sorted(Comparator.comparing(q -> marketCapUsd(q, usdRates),
-                            Comparator.reverseOrder()))
-                    .limit(limit)
-                    .toList());
-        });
-        return result;
     }
 
     private static String normalizeName(String name) {
