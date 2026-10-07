@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+/* Never let any child force the page wider than the viewport — mobile
+   browsers otherwise expand the layout viewport and show a white gutter. */
+html,
+body {
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+#root {
+  min-width: 0;
+  max-width: 100vw;
+}

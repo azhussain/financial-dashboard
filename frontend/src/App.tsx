@@ -98,7 +98,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8">
         <header className="flex w-full flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-          <div>
+          <div className="min-w-0">
             <h1 className="bg-gradient-to-r from-emerald-300 via-emerald-400 to-cyan-400 bg-clip-text text-2xl font-bold tracking-tight text-transparent sm:text-3xl">
               Stocks Explorer
             </h1>
@@ -196,7 +196,7 @@ export default function App() {
                       {loading ? 'Loading…' : 'Load chart'}
                     </button>
 
-                    <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:ml-auto sm:w-auto sm:overflow-visible sm:pb-0">
+                    <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-1 sm:ml-auto sm:w-auto sm:overflow-visible sm:pb-0">
                       {PRESETS.map((p) => (
                         <button
                           key={p.label}

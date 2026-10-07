@@ -105,7 +105,7 @@ const StockRow = memo(function StockRow({
           <div className="truncate text-xs text-gray-400">{stock.name}</div>
         </div>
       </div>
-      <div className="shrink-0 text-right">
+      <div className="shrink-0 whitespace-nowrap text-right">
         <div className="text-sm font-semibold tabular-nums">
           {money(stock.price, stock.currency)}
         </div>

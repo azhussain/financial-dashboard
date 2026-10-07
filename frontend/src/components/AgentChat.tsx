@@ -108,7 +108,7 @@ export default function AgentChat() {
                     ? 'ml-auto w-fit max-w-[85%] rounded-lg bg-emerald-900/50 px-3 py-2 text-sm'
                     : m.role === 'error'
                       ? 'rounded-lg border border-red-800 bg-red-950/50 px-3 py-2 text-sm text-red-300'
-                      : 'w-fit max-w-[95%] whitespace-pre-wrap rounded-lg bg-gray-800 px-3 py-2 text-sm'
+                      : 'w-fit max-w-[95%] whitespace-pre-wrap break-words rounded-lg bg-gray-800 px-3 py-2 text-sm'
                 }
               >
                 {m.text}
