@@ -10,7 +10,12 @@ ECR_REPO="${ECR_REPO:-stocks-explorer-backend}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 SSM_PARAM="${SSM_PARAM:-/stocks-explorer/OPENAI_API_KEY}"
 
-ACCOUNT_ID=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | grep -oP '"accountId"\s*:\s*"\K[^"]+')
+# IMDSv2 is required on AL2023 — token first, then the identity document.
+IMDS_TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token \
+  -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600')
+ACCOUNT_ID=$(curl -s -H "X-aws-ec2-metadata-token: ${IMDS_TOKEN}" \
+  http://169.254.169.254/latest/dynamic/instance-identity/document \
+  | grep -oP '"accountId"\s*:\s*"\K[^"]+')
 ECR_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}"
 
 dnf install -y docker
