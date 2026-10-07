@@ -120,7 +120,7 @@
     <span class="badge">Yahoo Finance data</span>
     <span class="badge">SSE push updates</span>
     <span class="badge">LangChain4j + OpenAI</span>
-    <span class="badge">Docker · Cloudflare-ready</span>
+    <span class="badge">Docker · AWS (S3 + CloudFront + EC2)</span>
   </div>
 </header>
 
@@ -276,7 +276,7 @@
     <li><strong>Secrets</strong> — <code>OPENAI_API_KEY</code> is env-only (<code>${OPENAI_API_KEY:}</code> in properties); nothing secret is in the repo. No key → agent returns 503, everything else works.</li>
     <li><strong>CORS</strong> — <code>CORS_ALLOWED_ORIGINS</code> env allowlist; dev default <code>localhost:5173</code>.</li>
     <li><strong>Error hygiene</strong> — internal exceptions logged, never echoed; generic <code>{"error"}</code> bodies; verified by <code>ApiSecurityTest</code> (injection payloads, unknown endpoints, leak checks).</li>
-    <li><strong>Quota protection</strong> — recommend a WAF/rate-limit on <code>POST /api/agent/chat</code> (e.g., 10 req/min/IP) at the Cloudflare edge.</li>
+    <li><strong>Quota protection</strong> — recommend an AWS WAF rate-based rule on <code>POST /api/agent/chat</code> (e.g., 100 req/5min/IP) attached to the CloudFront distribution.</li>
     <li><strong>Staleness over wrongness</strong> — outages surface as STALE badges + retained data, never silently swapped values.</li>
     <li><strong>Yahoo quirks handled</strong> — browser User-Agent required (429 otherwise); cookie+crumb for quote endpoints with auto-refresh on 401/403.</li>
   </ul>
@@ -284,14 +284,17 @@
 
 <section id="deployment">
   <h2>8 · Deployment</h2>
-  <p>Split deploy: the JVM can't run on Cloudflare's edge, so the static frontend goes to
-  <strong>Cloudflare Pages</strong> and the backend runs as a <strong>Docker container</strong>
-  (Fly.io/Render/Railway/VPS) behind a Cloudflare-proxied <code>api.</code> subdomain.</p>
+  <p>All-in on AWS behind one <strong>CloudFront distribution</strong>: the default
+  behavior serves the React SPA from a private <strong>S3</strong> bucket (origin access
+  control — the bucket is never public), and <code>/api/*</code> proxies to the Spring
+  Boot container on <strong>EC2</strong> (Docker, image in ECR, secrets in SSM Parameter
+  Store). Same-origin means no CORS config and no <code>VITE_API_BASE</code> at build time.</p>
   <div class="grid cols3">
-    <div class="card"><h4>Frontend → Pages</h4><p>Build <code>npm run build</code> in <code>frontend/</code>, output <code>dist</code>. Set <code>VITE_API_BASE=https://api.yourdomain.com</code>; <code>public/_redirects</code> provides SPA fallback.</p></div>
-    <div class="card"><h4>Backend → container</h4><p>Multi-stage <code>Dockerfile</code> (Maven → Temurin JRE). Env: <code>OPENAI_API_KEY</code>, <code>CORS_ALLOWED_ORIGINS</code>, <code>PORT</code>. Probe: <code>/api/health</code>.</p></div>
-    <div class="card"><h4>Edge</h4><p>Orange-cloud <code>api.</code> DNS; WAF rate-limit on the agent endpoint; SSE streams through Cloudflare — heartbeat keeps the connection warm.</p></div>
+    <div class="card"><h4>Frontend → S3 + CloudFront</h4><p><code>npm run build</code> → <code>aws s3 sync dist/</code> → invalidation. SPA fallback via CloudFront error responses (403/404 → <code>index.html</code>). HTTPS free on the <code>cloudfront.net</code> domain.</p></div>
+    <div class="card"><h4>Backend → EC2 + ECR</h4><p>Multi-stage <code>Dockerfile</code> on a t3.small (<code>--restart unless-stopped</code>). SG allows 8080 only from CloudFront's origin-facing prefix list. Env: <code>OPENAI_API_KEY</code> (from SSM SecureString), <code>PORT</code>. Probe: <code>/api/health</code>.</p></div>
+    <div class="card"><h4>CI/CD → GitHub Actions</h4><p>Push → test → ECR push → SSM rolling restart; S3 sync + invalidation. OIDC auth, no stored keys. Full runbook: <code>deploy/aws-setup.md</code>. ~$15–20/mo all-in.</p></div>
   </div>
+  <div class="note">SSE streams through CloudFront — <code>/api/*</code> disables caching and compression, and the app's 25s heartbeat stays under the 60s origin read timeout.</div>
 </section>
 
 <section id="journey">

@@ -99,26 +99,25 @@ The Vite dev server proxies `/api` requests to the backend, so no extra configur
 
 A `snapshot` event (`{REGION: RegionSnapshot}`) is sent on connect so new or reconnected viewers immediately get the shared cache. Each `RegionSnapshot` carries ranked `MarketQuote[]` (`symbol`, `name`, `exchange`, `price`, `changePercent`, `marketCap`, `currency`, `sourceTimestamp`, `lastFetchTime`, `marketStatus`, `stale`) plus `lastSuccessAt`, `lastAttemptAt`, `consecutiveFailures`, and `stale`. After each refresh, a `market-update` event publishes `{region, lastSuccessAt, lastAttemptAt, stale, consecutiveFailures, changed[], order[], marketOpen}` — `changed` holds only rows whose displayed values moved, `order` the ranked symbols, and `marketOpen` whether any of the region's exchanges is in session (drives the adaptive cadence and the UI's closed/disabled-refresh state). A failed refresh publishes `stale: true` with an empty `changed` list so bad data can never overwrite valid values.
 
-## Production deployment (Cloudflare + container host)
+## Production deployment (AWS)
 
-Cloudflare Pages/Workers cannot run the JVM, so the app deploys split: static frontend on **Cloudflare Pages**, Spring Boot container on any host (Fly.io, Render, Railway, VPS) fronted by a Cloudflare-proxied `api.` subdomain.
+One **CloudFront distribution** fronts everything: the React SPA from a private **S3** bucket (via OAC) on the default path, and `/api/*` proxied to a **Dockerized Spring Boot backend on EC2** (image in ECR, secrets in SSM Parameter Store). Same-origin means no CORS configuration and no `VITE_API_BASE` at build time.
 
-**Backend** — `backend/Dockerfile` is a multi-stage Maven → JRE build:
-
-```bash
-cd backend && docker build -t stocks-api .
-docker run -e OPENAI_API_KEY=sk-... -e CORS_ALLOWED_ORIGINS=https://your-app.pages.dev -p 8080:8080 stocks-api
+```
+Browser ──HTTPS──▶ CloudFront (dxxxx.cloudfront.net)
+                     ├─ /      → S3 (private, OAC)      — SPA
+                     └─ /api/* → EC2 :8080 (no cache)   — Spring Boot container
 ```
 
-Environment variables: `PORT` (default 8080), `OPENAI_API_KEY` (enables the agent), `CORS_ALLOWED_ORIGINS` (comma-separated). Health probe: `GET /api/health`.
+**Backend** — `backend/Dockerfile` is a multi-stage Maven → JRE build; run with `--restart unless-stopped -p 8080:8080`. Environment variables: `PORT` (default 8080), `OPENAI_API_KEY` (enables the agent; on EC2 it's injected from the SSM SecureString `/stocks-explorer/OPENAI_API_KEY`), `CORS_ALLOWED_ORIGINS` (optional — same-origin deploy doesn't need it). Health probe: `GET /api/health`.
 
-**Frontend** — Cloudflare Pages project: build command `npm run build`, output `dist`, root `frontend/`. Set the API origin at build time:
+**Frontend** — `npm ci && npm run build` in `frontend/`, then `aws s3 sync dist/ s3://<bucket> --delete` and a CloudFront invalidation. `VITE_API_BASE` stays empty by design.
 
-```bash
-VITE_API_BASE=https://api.yourdomain.com npm run build
-```
+**Step-by-step**: `deploy/aws-setup.md` is the full runbook (IAM roles, ECR, SSM secret, EC2 + security group locked to CloudFront's origin prefix list, S3+OAC, distribution config in `deploy/dist-config.json`, smoke tests, rollback). `deploy/ec2-userdata.sh` bootstraps a fresh instance.
 
-(`frontend/public/_redirects` ships the SPA fallback.) Then DNS-proxy `api.yourdomain.com` through Cloudflare and add a WAF rate-limit rule on `/api/agent/chat` (e.g. 10 req/min per IP) to protect the OpenAI quota. Note: long agent answers (~30–120s) can approach Cloudflare's ~100s proxy timeout — consider streaming if this becomes an issue.
+**CI/CD**: `.github/workflows/deploy.yml` runs on push — backend tests → Docker build → ECR push → SSM rolling restart on the tagged instance; frontend tests → build → S3 sync → CloudFront invalidation. Auth is GitHub OIDC (`deploy/github-oidc-trust.json` + `github-deploy-policy.json`) — no stored AWS keys.
+
+Notes: SSE streams through CloudFront — `/api/*` uses `CachingDisabled` with compression off, and the app's 25s heartbeat sits inside CloudFront's 60s origin read timeout. Long Virtual Agent answers can still hit that timeout; a streaming chat endpoint is a planned follow-up. To protect the OpenAI quota, add an AWS WAF rate-based rule on `/api/agent/*` (e.g. 100 req/5min/IP).
 
 ## Testing
 
