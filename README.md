@@ -90,6 +90,27 @@ The Vite dev server proxies `/api` requests to the backend, so no extra configur
 
 `/markets` returns a `QuoteSummary[]` per region, each with `symbol`, `name`, `price`, `changePercent`, `marketCap`, `currency` (local listing currency), and `marketTime` (quote epoch). Ranking is USD-normalized via Yahoo FX pairs.
 
+## Production deployment (Cloudflare + container host)
+
+Cloudflare Pages/Workers cannot run the JVM, so the app deploys split: static frontend on **Cloudflare Pages**, Spring Boot container on any host (Fly.io, Render, Railway, VPS) fronted by a Cloudflare-proxied `api.` subdomain.
+
+**Backend** — `backend/Dockerfile` is a multi-stage Maven → JRE build:
+
+```bash
+cd backend && docker build -t stocks-api .
+docker run -e OPENAI_API_KEY=sk-... -e CORS_ALLOWED_ORIGINS=https://your-app.pages.dev -p 8080:8080 stocks-api
+```
+
+Environment variables: `PORT` (default 8080), `OPENAI_API_KEY` (enables the agent), `CORS_ALLOWED_ORIGINS` (comma-separated). Health probe: `GET /api/health`.
+
+**Frontend** — Cloudflare Pages project: build command `npm run build`, output `dist`, root `frontend/`. Set the API origin at build time:
+
+```bash
+VITE_API_BASE=https://api.yourdomain.com npm run build
+```
+
+(`frontend/public/_redirects` ships the SPA fallback.) Then DNS-proxy `api.yourdomain.com` through Cloudflare and add a WAF rate-limit rule on `/api/agent/chat` (e.g. 10 req/min per IP) to protect the OpenAI quota. Note: long agent answers (~30–120s) can approach Cloudflare's ~100s proxy timeout — consider streaming if this becomes an issue.
+
 ## Testing
 
 ```bash

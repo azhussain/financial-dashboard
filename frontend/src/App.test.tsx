@@ -89,12 +89,13 @@ describe('App', () => {
   it('renders regional top stocks panels', async () => {
     render(<App />)
 
-    expect(await screen.findByText(/Americas — top 2 by market cap/i)).toBeInTheDocument()
-    expect(await screen.findByText(/EMEA — top 1 by market cap/i)).toBeInTheDocument()
-    expect(await screen.findByText(/APAC — top 1 by market cap/i)).toBeInTheDocument()
+    expect(await screen.findByText('Americas')).toBeInTheDocument()
+    expect(await screen.findByText('EMEA')).toBeInTheDocument()
+    expect(await screen.findByText('APAC')).toBeInTheDocument()
     expect(await screen.findByText('NVDA')).toBeInTheDocument()
     expect(screen.getByText('5.77T USD')).toBeInTheDocument()
     expect(screen.getByText('0700.HK')).toBeInTheDocument()
+    expect(screen.getByText('HKD')).toBeInTheDocument() // currency chip on the ticker row
   })
 
   it('loads the chart when a top stock card is clicked', async () => {

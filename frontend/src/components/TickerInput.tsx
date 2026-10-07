@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { API_BASE } from '../api'
 
 interface Suggestion {
   symbol: string
@@ -43,7 +44,7 @@ export default function TickerInput({ value, onChange, onSubmit }: Props) {
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/stocks/search?q=${encodeURIComponent(query)}`)
+        const res = await fetch(`${API_BASE}/api/stocks/search?q=${encodeURIComponent(query)}`)
         if (!res.ok) return
         const data: Suggestion[] = await res.json()
         setSuggestions(data)
