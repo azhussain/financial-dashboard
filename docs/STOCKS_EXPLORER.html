@@ -95,7 +95,7 @@
     <a href="#pipeline">Live Data</a>
     <a href="#cadence">Cadence</a>
     <a href="#api">API</a>
-    <a href="#agent">Virtual Agent</a>
+    <a href="#agent">Agents</a>
     <a href="#security">Security</a>
     <a href="#deployment">Deployment</a>
     <a href="#journey">Build Journey</a>
@@ -191,6 +191,10 @@
     <tr><td>Backend</td><td><code>StockService</code></td><td>History, quotes, search, USD-normalized ranking, candidate pools.</td></tr>
     <tr><td>Backend</td><td><code>YahooFinanceClient</code></td><td>All Yahoo calls: v8 history (library), v7 quotes (cookie+crumb), v1 search; 15s quote cache.</td></tr>
     <tr><td>Backend</td><td><code>MarketAgentService</code></td><td>LangChain4j agent: tool calling, per-session memory, chart-intent gating.</td></tr>
+    <tr><td>Backend</td><td><code>GatewayAuthFilter</code></td><td>Auth/policy boundary on <code>/api/agent/**</code>; Bearer or <code>X-API-Key</code> when <code>AGENT_API_KEY</code> is set.</td></tr>
+    <tr><td>Backend</td><td><code>AgentOrchestratorService</code></td><td>Task submission/routing: queue → worker by type → evaluator → result store; bounded retry.</td></tr>
+    <tr><td>Backend</td><td><code>DataAgentWorker</code></td><td>Data-agent role: <code>QUOTE_LOOKUP</code>, <code>REGION_SNAPSHOT</code>, <code>REGION_REFRESH</code> tasks.</td></tr>
+    <tr><td>Backend</td><td><code>AuditStore</code></td><td>Task audit trail — in-memory ring, or durable Redis list when <code>AUDIT_STORE=redis</code>.</td></tr>
   </table>
 </section>
 
@@ -250,11 +254,16 @@
     <tr><td><span class="pill post">POST</span></td><td><code>/api/markets/{region}/refresh</code></td><td>202 queued · 404 unknown region</td></tr>
     <tr><td><span class="pill get">GET</span></td><td><code>/api/health</code></td><td><code>{"status":"ok"}</code></td></tr>
     <tr><td><span class="pill post">POST</span></td><td><code>/api/agent/chat</code> <code>{message, sessionId}</code></td><td><code>{message, charts[]}</code> · 503 without OPENAI_API_KEY</td></tr>
+    <tr><td><span class="pill post">POST</span></td><td><code>/api/agent/tasks</code> <code>{type, payload}</code></td><td>Submit an agent-mesh task → <code>202 {taskId}</code></td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/agent/tasks/{taskId}</code></td><td>Task result — PENDING / PASS / FAIL / ERROR</td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/agent/tasks/audit?n=</code></td><td>Recent audit entries, newest first</td></tr>
   </table>
+  <div class="note">All <code>/api/agent/**</code> endpoints sit behind the gateway filter — when <code>AGENT_API_KEY</code> is set, callers need <code>Authorization: Bearer &lt;key&gt;</code>.</div>
 </section>
 
 <section id="agent">
-  <h2>6 · The Virtual Agent</h2>
+  <h2>6 · Agents</h2>
+  <h3>The Virtual Agent</h3>
   <p>A genuinely agentic component: LangChain4j <code>AiServices</code> + OpenAI tool
   calling. The model plans its own tool usage, grounds every number in a fresh fetch,
   and answers in markdown bullets.</p>
@@ -268,6 +277,30 @@
     <li>Investment-style answers include a "not financial advice" disclaimer by prompt contract.</li>
     <li>ThreadLocal chart collector keeps the LLM context small while the UI gets full candle series.</li>
   </ul>
+  <h3>The agent mesh (Stage 1)</h3>
+  <p>Beneath the Virtual Agent sits a task-routed mesh — the gateway → orchestrator →
+  workers → evaluator spine of a full agentic architecture, kept deliberately
+  single-JVM (separate containers per role would waste ~1.5&nbsp;GB on a t3.small;
+  the contracts are what Stage 2/3 swap for SQS + per-role services).</p>
+  <div class="flow">
+    <div class="step">Gateway<small>Bearer / X-API-Key auth on /api/agent/**</small></div>
+    <div class="arrow">→</div>
+    <div class="step">Orchestrator<small>accepts tasks, routes by type</small></div>
+    <div class="arrow">→</div>
+    <div class="step">TaskQueue<small>in-memory now; SQS-shaped interface</small></div>
+    <div class="arrow">→</div>
+    <div class="step">Workers<small>DataAgentWorker: quote · snapshot · refresh</small></div>
+    <div class="arrow">→</div>
+    <div class="step">Evaluator<small>rule checks; reject → retry once</small></div>
+    <div class="arrow">→</div>
+    <div class="step">Audit<small>in-memory ring or durable Redis list</small></div>
+  </div>
+  <ul>
+    <li><strong>Extensible roles</strong> — a new agent is a bean declaring its <code>taskTypes()</code>; routing needs no wiring changes.</li>
+    <li><strong>Evaluator gating</strong> — results are sanity-checked (positive price + currency, non-empty non-stale snapshot) before being served; rejected output is retried once, then marked FAIL.</li>
+    <li><strong>Auditable</strong> — every terminal outcome records <code>{taskId, type, status, attempts, durationMs, reason, timestamp}</code>; <code>deploy/docker-compose.yml</code> runs app + Redis so the trail survives restarts.</li>
+    <li><strong>Chat is protected too</strong> — the gateway covers <code>/api/agent/chat</code>, closing the open-quota risk when <code>AGENT_API_KEY</code> is enabled.</li>
+  </ul>
 </section>
 
 <section id="security">
@@ -276,7 +309,7 @@
     <li><strong>Secrets</strong> — <code>OPENAI_API_KEY</code> is env-only (<code>${OPENAI_API_KEY:}</code> in properties); nothing secret is in the repo. No key → agent returns 503, everything else works.</li>
     <li><strong>CORS</strong> — <code>CORS_ALLOWED_ORIGINS</code> env allowlist; dev default <code>localhost:5173</code>.</li>
     <li><strong>Error hygiene</strong> — internal exceptions logged, never echoed; generic <code>{"error"}</code> bodies; verified by <code>ApiSecurityTest</code> (injection payloads, unknown endpoints, leak checks).</li>
-    <li><strong>Quota protection</strong> — recommend an AWS WAF rate-based rule on <code>POST /api/agent/chat</code> (e.g., 100 req/5min/IP) attached to the CloudFront distribution.</li>
+    <li><strong>Quota protection</strong> — <code>GatewayAuthFilter</code> keys <code>/api/agent/**</code> when <code>AGENT_API_KEY</code> is set; add an AWS WAF rate-based rule on <code>/api/agent/*</code> at the distribution for defense in depth.</li>
     <li><strong>Staleness over wrongness</strong> — outages surface as STALE badges + retained data, never silently swapped values.</li>
     <li><strong>Yahoo quirks handled</strong> — browser User-Agent required (429 otherwise); cookie+crumb for quote endpoints with auto-refresh on 401/403.</li>
   </ul>
@@ -313,6 +346,8 @@
     <div class="item"><span class="num">13</span> <span class="t">Markets Agent + SSE</span><div class="d">Worker abstraction, shared cache + diffing, change-only publish, STALE retention, manual refresh.</div></div>
     <div class="item"><span class="num">14</span> <span class="t">Stock details redesign</span><div class="d">Google-Finance-style panel, quote endpoint, preset chips, stats grid.</div></div>
     <div class="item"><span class="num">15</span> <span class="t">Adaptive cadence</span><div class="d">TradingWindow-driven open/closed polling (5m/30m), marketOpen metadata → UI.</div></div>
+    <div class="item"><span class="num">16</span> <span class="t">AWS deployment kit</span><div class="d">CloudFront+S3+EC2 topology, ECR/SSM secrets, GitHub OIDC CI/CD runbook.</div></div>
+    <div class="item"><span class="num">17</span> <span class="t">Agent mesh (Stage 1)</span><div class="d">Gateway auth, task queue, orchestrator → workers → evaluator, Redis audit; compose file for single-node run.</div></div>
   </div>
 </section>
 
@@ -328,9 +363,9 @@
     <tr><td>~1.2 MB JS bundle</td><td>ApexCharts weight on first paint</td><td>Code-split the chart component</td></tr>
   </table>
   <h3>Test coverage</h3>
-  <p>57 backend tests (cache diffing, adaptive cadence, backoff, endpoint contracts, security/injection)
-  and 17 frontend tests (SSE snapshot/update/stale flows, manual refresh, closed-market disable,
-  details panel, autocomplete, race guards).</p>
+  <p>80 backend tests (cache diffing, adaptive cadence, backoff, endpoint contracts, security/injection,
+  orchestrator routing, evaluator verdicts, gateway auth) and 17 frontend tests (SSE snapshot/update/stale
+  flows, manual refresh, closed-market disable, details panel, autocomplete, race guards).</p>
 </section>
 
 <footer>
