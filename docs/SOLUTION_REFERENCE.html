@@ -71,6 +71,12 @@
     background: #eef7f3; font-size: 13.5px; color: #1f4d3f;
   }
   .note.warn { border-color: var(--warn); background: var(--warn-bg); color: #7c4a03; }
+  figure.shot { margin: 18px 0 0; }
+  figure.shot img {
+    width: 100%; border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(15,23,42,.08); display: block;
+  }
+  figure.shot figcaption { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
   .arch { background: var(--code-bg); border-radius: 12px; padding: 24px; margin-top: 16px; color: #cbd5e1; font-size: 13px; overflow-x: auto; }
   .arch pre { font-family: "SF Mono", Consolas, monospace; font-size: 12.5px; line-height: 1.7; }
   .timeline { border-left: 2px solid var(--line); margin: 18px 0 0 6px; padding-left: 22px; }
@@ -91,6 +97,7 @@
   <div class="wrap">
     <span class="brand">Stocks Explorer</span>
     <a href="#overview">Overview</a>
+    <a href="#screenshots">Screenshots</a>
     <a href="#architecture">Architecture</a>
     <a href="#pipeline">Live Data</a>
     <a href="#cadence">Cadence</a>
@@ -150,8 +157,20 @@
   </div>
 </section>
 
+<section id="screenshots">
+  <h2>2 · Product screenshots</h2>
+  <figure class="shot">
+    <img src="screenshots/dashboard-watchlists.png" alt="Stocks Explorer dashboard — three regional watchlists (Americas, APAC, EMEA) with live prices, currencies, market status and refresh controls" />
+    <figcaption>Dashboard — regional watchlists with live prices, currency chips, market-status badges (POST / closed), per-region refresh, and the floating Virtual Agent launcher.</figcaption>
+  </figure>
+  <figure class="shot">
+    <img src="screenshots/stock-details.png" alt="Stock Details panel — MSFT price header with currency and daily change, range chips, candlestick chart, and stats grid" />
+    <figcaption>Stock Details — live quote header (price, currency, daily change, market status), 1D–Max range chips, candlestick chart, and the stats grid (Open/High/Low, Vol/Avg Vol, Mkt Cap, period range).</figcaption>
+  </figure>
+</section>
+
 <section id="architecture">
-  <h2>2 · Architecture</h2>
+  <h2>3 · Architecture</h2>
   <p>The system is two deployables: a static React SPA and a Spring Boot service.
   The SPA reads on-demand data over REST and live market data over SSE. The backend
   owns all Yahoo Finance access — the browser never talks to Yahoo or OpenAI directly.</p>
@@ -199,7 +218,7 @@
 </section>
 
 <section id="pipeline">
-  <h2>3 · The live-data pipeline (Markets Agent)</h2>
+  <h2>4 · The live-data pipeline (Markets Agent)</h2>
   <p>Every cycle, each regional worker runs the same five-stage pipeline. One shared
   schedule serves all viewers — nobody's browser triggers its own Yahoo calls.</p>
   <div class="flow">
@@ -224,7 +243,7 @@
 </section>
 
 <section id="cadence">
-  <h2>4 · Adaptive cadence</h2>
+  <h2>5 · Adaptive cadence</h2>
   <p>Polling a closed market every five minutes wastes calls and yields nothing.
   Each worker declares the trading sessions of the exchanges it covers; a region
   is "open" while <em>any</em> window is in session. Cadence follows the market:</p>
@@ -242,7 +261,7 @@
 </section>
 
 <section id="api">
-  <h2>5 · API surface</h2>
+  <h2>6 · API surface</h2>
   <table>
     <tr><th></th><th>Endpoint</th><th>Returns</th></tr>
     <tr><td><span class="pill get">GET</span></td><td><code>/api/stocks/{symbol}/history?from=&amp;to=</code></td><td>Split-adjusted OHLC candles (UTC dates, inclusive end)</td></tr>
@@ -262,7 +281,7 @@
 </section>
 
 <section id="agent">
-  <h2>6 · Agents</h2>
+  <h2>7 · Agents</h2>
   <h3>The Virtual Agent</h3>
   <p>A genuinely agentic component: LangChain4j <code>AiServices</code> + OpenAI tool
   calling. The model plans its own tool usage, grounds every number in a fresh fetch,
@@ -304,7 +323,7 @@
 </section>
 
 <section id="security">
-  <h2>7 · Security &amp; resilience</h2>
+  <h2>8 · Security &amp; resilience</h2>
   <ul>
     <li><strong>Secrets</strong> — <code>OPENAI_API_KEY</code> is env-only (<code>${OPENAI_API_KEY:}</code> in properties); nothing secret is in the repo. No key → agent returns 503, everything else works.</li>
     <li><strong>CORS</strong> — <code>CORS_ALLOWED_ORIGINS</code> env allowlist; dev default <code>localhost:5173</code>.</li>
@@ -316,7 +335,7 @@
 </section>
 
 <section id="deployment">
-  <h2>8 · Deployment</h2>
+  <h2>9 · Deployment</h2>
   <p>All-in on AWS behind one <strong>CloudFront distribution</strong>: the default
   behavior serves the React SPA from a private <strong>S3</strong> bucket (origin access
   control — the bucket is never public), and <code>/api/*</code> proxies to the Spring
@@ -331,7 +350,7 @@
 </section>
 
 <section id="journey">
-  <h2>9 · How it was built — iterations</h2>
+  <h2>10 · How it was built — iterations</h2>
   <div class="timeline">
     <div class="item"><span class="num">1</span> <span class="t">Basic dashboard</span><div class="d">Ticker + dates → candlestick via Yahoo v8; UA workaround for 429s.</div></div>
     <div class="item"><span class="num">2</span> <span class="t">Tests &amp; hardening</span><div class="d">JUnit/MockMvc/security suite, JaCoCo; mockable YahooFinanceClient; generic 500s.</div></div>
@@ -352,7 +371,7 @@
 </section>
 
 <section id="limitations">
-  <h2>10 · Known limitations &amp; roadmap</h2>
+  <h2>11 · Known limitations &amp; roadmap</h2>
   <table>
     <tr><th>Limitation</th><th>Impact</th><th>Mitigation / next step</th></tr>
     <tr><td>Yahoo Finance is unofficial</td><td>Rate limits / behavior changes possible</td><td>Crumb+UA handled; backoff + STALE on failure; a licensed feed is the eventual upgrade</td></tr>
