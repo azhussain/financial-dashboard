@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { API_BASE } from '../api'
 
 export interface TopStock {
   symbol: string
@@ -62,6 +63,9 @@ function StockRow({
         <span className="w-4 shrink-0 text-xs text-gray-500">{rank}</span>
         <div className="min-w-0">
           <span className="text-sm font-bold">{stock.symbol}</span>
+          <span className="ml-1.5 rounded bg-gray-800 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300/90">
+            {stock.currency}
+          </span>
           <div className="truncate text-xs text-gray-400">{stock.name}</div>
         </div>
       </div>
@@ -88,7 +92,7 @@ export default function TopStocks({ onSelect, selected }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/stocks/markets')
+    fetch(`${API_BASE}/api/stocks/markets?limit=20`)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to load top stocks (${res.status})`)
         return res.json()
@@ -105,15 +109,17 @@ export default function TopStocks({ onSelect, selected }: Props) {
   return (
     <div className="grid gap-4 md:grid-cols-3">
       {labels.map(([region, stocks]) => (
-        <div key={region}>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">
+        <div
+          key={region}
+          className="flex max-h-[32rem] flex-col rounded-xl bg-gray-900/60 p-4 ring-1 ring-gray-800"
+        >
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-emerald-300">
             {REGION_LABELS[region] ?? region}
-            {stocks.length > 0 && ` — top ${stocks.length} by market cap`}
           </h2>
-          <div className="mt-3 flex flex-col gap-2">
+          <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
             {stocks.length === 0
-              ? Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-900 ring-1 ring-gray-800" />
+              ? Array.from({ length: 20 }).map((_, i) => (
+                  <div key={i} className="h-14 shrink-0 animate-pulse rounded-lg bg-gray-900 ring-1 ring-gray-800" />
                 ))
               : stocks.map((s, i) => (
                   <StockRow

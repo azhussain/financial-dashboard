@@ -37,13 +37,20 @@ public class StockService {
         Map<String, List<String>> m = new LinkedHashMap<>();
         m.put("AMERICAS", List.of(
                 "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META",
-                "AVGO", "TSLA", "BRK-B", "LLY", "JPM", "V", "RY.TO", "PBR"));
+                "AVGO", "TSLA", "BRK-B", "LLY", "JPM", "V", "WMT", "XOM",
+                "MA", "COST", "HD", "NFLX", "PG", "CRM", "ORCL", "AMD",
+                "RY.TO", "PBR"));
         m.put("EMEA", List.of(
                 "2222.SR", "MC.PA", "ASML.AS", "NESN.SW", "NOVO-B.CO", "ROG.SW",
-                "SAP.DE", "OR.PA", "SIE.DE", "AIR.PA", "SAN.PA", "SU.PA"));
+                "SAP.DE", "OR.PA", "SIE.DE", "AIR.PA", "SAN.PA", "SU.PA",
+                "TTE.PA", "ALV.DE", "DTE.DE", "PRX.AS", "UBSG.SW", "IFX.DE",
+                "BAS.DE", "AI.PA", "EL.PA", "CS.PA"));
         m.put("APAC", List.of(
                 "0700.HK", "9988.HK", "3690.HK", "9618.HK", "1299.HK", "1398.HK",
-                "2330.TW", "005930.KS", "7203.T", "6758.T", "8306.T", "BHP.AX"));
+                "2318.HK", "0941.HK", "3988.HK", "0939.HK",
+                "2330.TW", "005930.KS", "000660.KS",
+                "7203.T", "6758.T", "8306.T", "6861.T", "9984.T", "7974.T", "6501.T",
+                "BHP.AX", "CBA.AX", "CSL.AX"));
         REGION_CANDIDATES = Collections.unmodifiableMap(m);
     }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import CandleChart, { type Candle } from './CandleChart'
+import { API_BASE } from '../api'
 
 interface ChartPayload {
   symbol: string
@@ -41,7 +42,7 @@ export default function AgentChat() {
     setLoading(true)
     setMessages((m) => [...m, { role: 'user', text }])
     try {
-      const res = await fetch('/api/agent/chat', {
+      const res = await fetch(`${API_BASE}/api/agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text, sessionId: sessionId.current }),
