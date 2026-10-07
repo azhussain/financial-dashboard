@@ -1,0 +1,48 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EcrAuth",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrPush",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:CompleteLayerUpload",
+        "ecr:InitiateLayerUpload",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ],
+      "Resource": "arn:aws:ecr:REGION_PLACEHOLDER:ACCOUNT_ID_PLACEHOLDER:repository/stocks-explorer-backend"
+    },
+    {
+      "Sid": "SsmDeploy",
+      "Effect": "Allow",
+      "Action": ["ssm:SendCommand", "ssm:ListCommandInvocations", "ssm:GetCommandInvocation"],
+      "Resource": [
+        "arn:aws:ec2:REGION_PLACEHOLDER:ACCOUNT_ID_PLACEHOLDER:instance/*",
+        "arn:aws:ssm:REGION_PLACEHOLDER:ACCOUNT_ID_PLACEHOLDER:document/AWS-RunShellScript",
+        "arn:aws:ssm:REGION_PLACEHOLDER:ACCOUNT_ID_PLACEHOLDER:*"
+      ]
+    },
+    {
+      "Sid": "S3Sync",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "s3:GetObject"],
+      "Resource": [
+        "arn:aws:s3:::stocks-explorer-frontend-*",
+        "arn:aws:s3:::stocks-explorer-frontend-*/*"
+      ]
+    },
+    {
+      "Sid": "CloudFrontInvalidate",
+      "Effect": "Allow",
+      "Action": "cloudfront:CreateInvalidation",
+      "Resource": "arn:aws:cloudfront::ACCOUNT_ID_PLACEHOLDER:distribution/*"
+    }
+  ]
+}

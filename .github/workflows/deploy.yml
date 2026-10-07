@@ -1,0 +1,101 @@
+name: Deploy
+
+on:
+  push:
+    branches: [b1, main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REPO: ${{ vars.ECR_REPO || 'stocks-explorer-backend' }}
+  IMAGE: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION || 'us-east-1' }}.amazonaws.com/${{ vars.ECR_REPO || 'stocks-explorer-backend' }}
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Test
+        run: mvn -q -B verify
+        working-directory: backend
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - name: Build and push image
+        working-directory: backend
+        run: |
+          docker build -t $IMAGE:$GITHUB_SHA -t $IMAGE:latest .
+          docker push $IMAGE:$GITHUB_SHA
+          docker push $IMAGE:latest
+
+      - name: Rolling restart on EC2 via SSM
+        run: |
+          cat > ssm-params.json <<EOF
+          {"commands":[
+            "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${IMAGE%%/*}",
+            "docker rm -f stocks-api 2>/dev/null || true",
+            "docker pull ${IMAGE}:latest",
+            "OPENAI_API_KEY=\$(aws ssm get-parameter --name /stocks-explorer/OPENAI_API_KEY --with-decryption --region ${AWS_REGION} --query Parameter.Value --output text || true)",
+            "docker run -d --name stocks-api --restart unless-stopped -p 8080:8080 -e PORT=8080 -e OPENAI_API_KEY=\"\$OPENAI_API_KEY\" ${IMAGE}:latest",
+            "for i in \$(seq 1 30); do curl -sf localhost:8080/api/health && exit 0; sleep 2; done; exit 1"
+          ]}
+          EOF
+          CMD_ID=$(aws ssm send-command \
+            --document-name AWS-RunShellScript \
+            --targets Key=tag:App,Values=stocks-explorer \
+            --parameters file://ssm-params.json \
+            --query 'Command.CommandId' --output text)
+          for i in $(seq 1 24); do
+            STATUS=$(aws ssm list-command-invocations --command-id "$CMD_ID" \
+              --query 'CommandInvocations[0].Status' --output text)
+            echo "SSM status: $STATUS"
+            [ "$STATUS" = "Success" ] && exit 0
+            [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] && exit 1
+            sleep 10
+          done
+          exit 1
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test and build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to S3 and invalidate
+        run: |
+          aws s3 sync frontend/dist/ s3://${{ vars.S3_BUCKET }} --delete
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ vars.DISTRIBUTION_ID }} --paths "/*"

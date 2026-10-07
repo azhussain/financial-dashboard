@@ -2,7 +2,7 @@
 
 ## 1. System Overview
 
-A single-page application ("Stocks Explorer") that shows live regional market watchlists and renders candlestick charts for any ticker. The frontend talks to a Spring Boot backend in two ways: plain REST for on-demand data (history, quote, search, agent chat) and **server-sent events** for live market data. A backend **Markets Agent** refreshes each region's top-20 on a shared 5-minute schedule, diffs each snapshot against a shared cache, and pushes only changed rows to connected dashboards. All market data ultimately comes from Yahoo Finance — historical candles through the `yahoofinance-api` Java library, and quotes/search through Yahoo's HTTP endpoints directly (cookie + crumb authentication).
+A single-page application ("Stocks Explorer") that shows live regional market watchlists and renders candlestick charts for any ticker. The frontend talks to a Spring Boot backend in two ways: plain REST for on-demand data (history, quote, search, agent chat) and **server-sent events** for live market data. A backend **Markets Agent** refreshes each region's top-20 on a shared market-hours-aware schedule (5 min open / 30 min closed), diffs each snapshot against a shared cache, and pushes only changed rows to connected dashboards. All market data ultimately comes from Yahoo Finance — historical candles through the `yahoofinance-api` Java library, and quotes/search through Yahoo's HTTP endpoints directly (cookie + crumb authentication).
 
 ```mermaid
 flowchart LR
@@ -101,6 +101,10 @@ POST /api/agent/chat  {message, sessionId}                        → {message, 
 ### AI agent
 
 `MarketAgentService` wraps a LangChain4j `AiServices` agent (OpenAI, tool calling) with per-`sessionId` `MessageWindowChatMemory` (20 messages). `StockTools` exposes four tools — `searchStocks`, `getTopStocks`, `getRegionalTopStocks`, `getStockHistory` — delegating to `StockService`. When `getStockHistory` runs, the full candle series is recorded in a per-request `ThreadLocal` collector while the LLM receives only a compact summary; chart payloads are attached to the response only when the user's message explicitly asks for one. The feature is disabled unless `OPENAI_API_KEY` is set (503 otherwise).
+
+### Agent mesh (Stage 1)
+
+A task-routed agent mesh backs the LLM agent: `GatewayAuthFilter` is the auth/policy boundary on `/api/agent/**` (Bearer/`X-API-Key` when `AGENT_API_KEY` is set); `AgentOrchestratorService` accepts tasks (`POST /api/agent/tasks`), routes each `AgentTask` by type to an `AgentWorker` (`DataAgentWorker` today: quote lookup, region snapshot, manual refresh), runs results through `ResultEvaluator` (`DeterministicResultEvaluator` — schema/sanity rules; evaluator rejection requeues once, worker exceptions become `ERROR`), and records every terminal outcome to `AuditStore` (in-memory ring buffer, or a durable Redis list when `AUDIT_STORE=redis`). Results are polled via `GET /api/agent/tasks/{id}`; the trail via `GET /api/agent/tasks/audit`. `TaskQueue` mirrors SQS semantics so Stage 2 replaces the in-memory queue without touching the orchestrator.
 
 ## 4. Request Flows
 
@@ -236,5 +240,13 @@ sequenceDiagram
 | `MarketAgentServiceTest` | Chart-intent gating |
 | `StockToolsTest` | Agent tool wiring incl. regional overview |
 | `ApiSecurityTest` | `@SpringBootTest`: CORS policy, HTTP methods, injection payloads, error leakage |
+| `AgentOrchestratorServiceTest` | Task routing, evaluator retry-then-fail, worker error mapping, audit recording |
+| `DeterministicResultEvaluatorTest` | Per-type verdict rules (quote/snapshot/refresh) |
+| `GatewayAuthFilterTest` | Bearer/X-API-Key auth on `/api/agent/**`, dev pass-through, non-agent paths unguarded |
+| `AgentTaskControllerTest` | `@WebMvcTest`: submit → 202, status → 200/404, audit endpoint |
 | `App.test.tsx` | Vitest + RTL: forms, autocomplete, SSE snapshot/update/stale flows, manual refresh, details panel, tile-click behavior |
 | JaCoCo | Coverage report → `backend/target/site/jacoco/` |
+
+## 7. Deployment (AWS)
+
+Production topology is a single **CloudFront distribution** with two origins: the default behavior serves the built SPA from a private **S3** bucket (OAC), and `/api/*` proxies — uncached, uncompressed — to the Spring Boot container on **EC2** (image pulled from ECR; `OPENAI_API_KEY` injected from an SSM SecureString). Same-origin serving means CORS and `VITE_API_BASE` are non-issues. SSE survives the edge because `/api/*` disables compression and the app's 25s heartbeat sits under CloudFront's 60s origin read timeout. The EC2 security group only allows 8080 from CloudFront's origin-facing managed prefix list, so the backend is unreachable except through the distribution. Deploys run through GitHub Actions (OIDC → ECR push → SSM rolling restart; S3 sync → invalidation). Full runbook: `deploy/aws-setup.md`.

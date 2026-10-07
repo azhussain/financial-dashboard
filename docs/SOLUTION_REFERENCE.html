@@ -71,6 +71,12 @@
     background: #eef7f3; font-size: 13.5px; color: #1f4d3f;
   }
   .note.warn { border-color: var(--warn); background: var(--warn-bg); color: #7c4a03; }
+  figure.shot { margin: 18px 0 0; }
+  figure.shot img {
+    width: 100%; border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(15,23,42,.08); display: block;
+  }
+  figure.shot figcaption { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
   .arch { background: var(--code-bg); border-radius: 12px; padding: 24px; margin-top: 16px; color: #cbd5e1; font-size: 13px; overflow-x: auto; }
   .arch pre { font-family: "SF Mono", Consolas, monospace; font-size: 12.5px; line-height: 1.7; }
   .timeline { border-left: 2px solid var(--line); margin: 18px 0 0 6px; padding-left: 22px; }
@@ -91,11 +97,12 @@
   <div class="wrap">
     <span class="brand">Stocks Explorer</span>
     <a href="#overview">Overview</a>
+    <a href="#screenshots">Screenshots</a>
     <a href="#architecture">Architecture</a>
     <a href="#pipeline">Live Data</a>
     <a href="#cadence">Cadence</a>
     <a href="#api">API</a>
-    <a href="#agent">Virtual Agent</a>
+    <a href="#agent">Agents</a>
     <a href="#security">Security</a>
     <a href="#deployment">Deployment</a>
     <a href="#journey">Build Journey</a>
@@ -120,7 +127,7 @@
     <span class="badge">Yahoo Finance data</span>
     <span class="badge">SSE push updates</span>
     <span class="badge">LangChain4j + OpenAI</span>
-    <span class="badge">Docker · Cloudflare-ready</span>
+    <span class="badge">Docker · AWS (S3 + CloudFront + EC2)</span>
   </div>
 </header>
 
@@ -150,8 +157,20 @@
   </div>
 </section>
 
+<section id="screenshots">
+  <h2>2 · Product screenshots</h2>
+  <figure class="shot">
+    <img src="screenshots/dashboard-watchlists.png" alt="Stocks Explorer dashboard — three regional watchlists (Americas, APAC, EMEA) with live prices, currencies, market status and refresh controls" />
+    <figcaption>Dashboard — regional watchlists with live prices, currency chips, market-status badges (POST / closed), per-region refresh, and the floating Virtual Agent launcher.</figcaption>
+  </figure>
+  <figure class="shot">
+    <img src="screenshots/stock-details.png" alt="Stock Details panel — MSFT price header with currency and daily change, range chips, candlestick chart, and stats grid" />
+    <figcaption>Stock Details — live quote header (price, currency, daily change, market status), 1D–Max range chips, candlestick chart, and the stats grid (Open/High/Low, Vol/Avg Vol, Mkt Cap, period range).</figcaption>
+  </figure>
+</section>
+
 <section id="architecture">
-  <h2>2 · Architecture</h2>
+  <h2>3 · Architecture</h2>
   <p>The system is two deployables: a static React SPA and a Spring Boot service.
   The SPA reads on-demand data over REST and live market data over SSE. The backend
   owns all Yahoo Finance access — the browser never talks to Yahoo or OpenAI directly.</p>
@@ -191,11 +210,15 @@
     <tr><td>Backend</td><td><code>StockService</code></td><td>History, quotes, search, USD-normalized ranking, candidate pools.</td></tr>
     <tr><td>Backend</td><td><code>YahooFinanceClient</code></td><td>All Yahoo calls: v8 history (library), v7 quotes (cookie+crumb), v1 search; 15s quote cache.</td></tr>
     <tr><td>Backend</td><td><code>MarketAgentService</code></td><td>LangChain4j agent: tool calling, per-session memory, chart-intent gating.</td></tr>
+    <tr><td>Backend</td><td><code>GatewayAuthFilter</code></td><td>Auth/policy boundary on <code>/api/agent/**</code>; Bearer or <code>X-API-Key</code> when <code>AGENT_API_KEY</code> is set.</td></tr>
+    <tr><td>Backend</td><td><code>AgentOrchestratorService</code></td><td>Task submission/routing: queue → worker by type → evaluator → result store; bounded retry.</td></tr>
+    <tr><td>Backend</td><td><code>DataAgentWorker</code></td><td>Data-agent role: <code>QUOTE_LOOKUP</code>, <code>REGION_SNAPSHOT</code>, <code>REGION_REFRESH</code> tasks.</td></tr>
+    <tr><td>Backend</td><td><code>AuditStore</code></td><td>Task audit trail — in-memory ring, or durable Redis list when <code>AUDIT_STORE=redis</code>.</td></tr>
   </table>
 </section>
 
 <section id="pipeline">
-  <h2>3 · The live-data pipeline (Markets Agent)</h2>
+  <h2>4 · The live-data pipeline (Markets Agent)</h2>
   <p>Every cycle, each regional worker runs the same five-stage pipeline. One shared
   schedule serves all viewers — nobody's browser triggers its own Yahoo calls.</p>
   <div class="flow">
@@ -220,7 +243,7 @@
 </section>
 
 <section id="cadence">
-  <h2>4 · Adaptive cadence</h2>
+  <h2>5 · Adaptive cadence</h2>
   <p>Polling a closed market every five minutes wastes calls and yields nothing.
   Each worker declares the trading sessions of the exchanges it covers; a region
   is "open" while <em>any</em> window is in session. Cadence follows the market:</p>
@@ -238,7 +261,7 @@
 </section>
 
 <section id="api">
-  <h2>5 · API surface</h2>
+  <h2>6 · API surface</h2>
   <table>
     <tr><th></th><th>Endpoint</th><th>Returns</th></tr>
     <tr><td><span class="pill get">GET</span></td><td><code>/api/stocks/{symbol}/history?from=&amp;to=</code></td><td>Split-adjusted OHLC candles (UTC dates, inclusive end)</td></tr>
@@ -250,11 +273,16 @@
     <tr><td><span class="pill post">POST</span></td><td><code>/api/markets/{region}/refresh</code></td><td>202 queued · 404 unknown region</td></tr>
     <tr><td><span class="pill get">GET</span></td><td><code>/api/health</code></td><td><code>{"status":"ok"}</code></td></tr>
     <tr><td><span class="pill post">POST</span></td><td><code>/api/agent/chat</code> <code>{message, sessionId}</code></td><td><code>{message, charts[]}</code> · 503 without OPENAI_API_KEY</td></tr>
+    <tr><td><span class="pill post">POST</span></td><td><code>/api/agent/tasks</code> <code>{type, payload}</code></td><td>Submit an agent-mesh task → <code>202 {taskId}</code></td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/agent/tasks/{taskId}</code></td><td>Task result — PENDING / PASS / FAIL / ERROR</td></tr>
+    <tr><td><span class="pill get">GET</span></td><td><code>/api/agent/tasks/audit?n=</code></td><td>Recent audit entries, newest first</td></tr>
   </table>
+  <div class="note">All <code>/api/agent/**</code> endpoints sit behind the gateway filter — when <code>AGENT_API_KEY</code> is set, callers need <code>Authorization: Bearer &lt;key&gt;</code>.</div>
 </section>
 
 <section id="agent">
-  <h2>6 · The Virtual Agent</h2>
+  <h2>7 · Agents</h2>
+  <h3>The Virtual Agent</h3>
   <p>A genuinely agentic component: LangChain4j <code>AiServices</code> + OpenAI tool
   calling. The model plans its own tool usage, grounds every number in a fresh fetch,
   and answers in markdown bullets.</p>
@@ -268,34 +296,61 @@
     <li>Investment-style answers include a "not financial advice" disclaimer by prompt contract.</li>
     <li>ThreadLocal chart collector keeps the LLM context small while the UI gets full candle series.</li>
   </ul>
+  <h3>The agent mesh (Stage 1)</h3>
+  <p>Beneath the Virtual Agent sits a task-routed mesh — the gateway → orchestrator →
+  workers → evaluator spine of a full agentic architecture, kept deliberately
+  single-JVM (separate containers per role would waste ~1.5&nbsp;GB on a t3.small;
+  the contracts are what Stage 2/3 swap for SQS + per-role services).</p>
+  <div class="flow">
+    <div class="step">Gateway<small>Bearer / X-API-Key auth on /api/agent/**</small></div>
+    <div class="arrow">→</div>
+    <div class="step">Orchestrator<small>accepts tasks, routes by type</small></div>
+    <div class="arrow">→</div>
+    <div class="step">TaskQueue<small>in-memory now; SQS-shaped interface</small></div>
+    <div class="arrow">→</div>
+    <div class="step">Workers<small>DataAgentWorker: quote · snapshot · refresh</small></div>
+    <div class="arrow">→</div>
+    <div class="step">Evaluator<small>rule checks; reject → retry once</small></div>
+    <div class="arrow">→</div>
+    <div class="step">Audit<small>in-memory ring or durable Redis list</small></div>
+  </div>
+  <ul>
+    <li><strong>Extensible roles</strong> — a new agent is a bean declaring its <code>taskTypes()</code>; routing needs no wiring changes.</li>
+    <li><strong>Evaluator gating</strong> — results are sanity-checked (positive price + currency, non-empty non-stale snapshot) before being served; rejected output is retried once, then marked FAIL.</li>
+    <li><strong>Auditable</strong> — every terminal outcome records <code>{taskId, type, status, attempts, durationMs, reason, timestamp}</code>; <code>deploy/docker-compose.yml</code> runs app + Redis so the trail survives restarts.</li>
+    <li><strong>Chat is protected too</strong> — the gateway covers <code>/api/agent/chat</code>, closing the open-quota risk when <code>AGENT_API_KEY</code> is enabled.</li>
+  </ul>
 </section>
 
 <section id="security">
-  <h2>7 · Security &amp; resilience</h2>
+  <h2>8 · Security &amp; resilience</h2>
   <ul>
     <li><strong>Secrets</strong> — <code>OPENAI_API_KEY</code> is env-only (<code>${OPENAI_API_KEY:}</code> in properties); nothing secret is in the repo. No key → agent returns 503, everything else works.</li>
     <li><strong>CORS</strong> — <code>CORS_ALLOWED_ORIGINS</code> env allowlist; dev default <code>localhost:5173</code>.</li>
     <li><strong>Error hygiene</strong> — internal exceptions logged, never echoed; generic <code>{"error"}</code> bodies; verified by <code>ApiSecurityTest</code> (injection payloads, unknown endpoints, leak checks).</li>
-    <li><strong>Quota protection</strong> — recommend a WAF/rate-limit on <code>POST /api/agent/chat</code> (e.g., 10 req/min/IP) at the Cloudflare edge.</li>
+    <li><strong>Quota protection</strong> — <code>GatewayAuthFilter</code> keys <code>/api/agent/**</code> when <code>AGENT_API_KEY</code> is set; add an AWS WAF rate-based rule on <code>/api/agent/*</code> at the distribution for defense in depth.</li>
     <li><strong>Staleness over wrongness</strong> — outages surface as STALE badges + retained data, never silently swapped values.</li>
     <li><strong>Yahoo quirks handled</strong> — browser User-Agent required (429 otherwise); cookie+crumb for quote endpoints with auto-refresh on 401/403.</li>
   </ul>
 </section>
 
 <section id="deployment">
-  <h2>8 · Deployment</h2>
-  <p>Split deploy: the JVM can't run on Cloudflare's edge, so the static frontend goes to
-  <strong>Cloudflare Pages</strong> and the backend runs as a <strong>Docker container</strong>
-  (Fly.io/Render/Railway/VPS) behind a Cloudflare-proxied <code>api.</code> subdomain.</p>
+  <h2>9 · Deployment</h2>
+  <p>All-in on AWS behind one <strong>CloudFront distribution</strong>: the default
+  behavior serves the React SPA from a private <strong>S3</strong> bucket (origin access
+  control — the bucket is never public), and <code>/api/*</code> proxies to the Spring
+  Boot container on <strong>EC2</strong> (Docker, image in ECR, secrets in SSM Parameter
+  Store). Same-origin means no CORS config and no <code>VITE_API_BASE</code> at build time.</p>
   <div class="grid cols3">
-    <div class="card"><h4>Frontend → Pages</h4><p>Build <code>npm run build</code> in <code>frontend/</code>, output <code>dist</code>. Set <code>VITE_API_BASE=https://api.yourdomain.com</code>; <code>public/_redirects</code> provides SPA fallback.</p></div>
-    <div class="card"><h4>Backend → container</h4><p>Multi-stage <code>Dockerfile</code> (Maven → Temurin JRE). Env: <code>OPENAI_API_KEY</code>, <code>CORS_ALLOWED_ORIGINS</code>, <code>PORT</code>. Probe: <code>/api/health</code>.</p></div>
-    <div class="card"><h4>Edge</h4><p>Orange-cloud <code>api.</code> DNS; WAF rate-limit on the agent endpoint; SSE streams through Cloudflare — heartbeat keeps the connection warm.</p></div>
+    <div class="card"><h4>Frontend → S3 + CloudFront</h4><p><code>npm run build</code> → <code>aws s3 sync dist/</code> → invalidation. SPA fallback via CloudFront error responses (403/404 → <code>index.html</code>). HTTPS free on the <code>cloudfront.net</code> domain.</p></div>
+    <div class="card"><h4>Backend → EC2 + ECR</h4><p>Multi-stage <code>Dockerfile</code> on a t3.small (<code>--restart unless-stopped</code>). SG allows 8080 only from CloudFront's origin-facing prefix list. Env: <code>OPENAI_API_KEY</code> (from SSM SecureString), <code>PORT</code>. Probe: <code>/api/health</code>.</p></div>
+    <div class="card"><h4>CI/CD → GitHub Actions</h4><p>Push → test → ECR push → SSM rolling restart; S3 sync + invalidation. OIDC auth, no stored keys. Full runbook: <code>deploy/aws-setup.md</code>. ~$15–20/mo all-in.</p></div>
   </div>
+  <div class="note">SSE streams through CloudFront — <code>/api/*</code> disables caching and compression, and the app's 25s heartbeat stays under the 60s origin read timeout.</div>
 </section>
 
 <section id="journey">
-  <h2>9 · How it was built — iterations</h2>
+  <h2>10 · How it was built — iterations</h2>
   <div class="timeline">
     <div class="item"><span class="num">1</span> <span class="t">Basic dashboard</span><div class="d">Ticker + dates → candlestick via Yahoo v8; UA workaround for 429s.</div></div>
     <div class="item"><span class="num">2</span> <span class="t">Tests &amp; hardening</span><div class="d">JUnit/MockMvc/security suite, JaCoCo; mockable YahooFinanceClient; generic 500s.</div></div>
@@ -310,11 +365,13 @@
     <div class="item"><span class="num">13</span> <span class="t">Markets Agent + SSE</span><div class="d">Worker abstraction, shared cache + diffing, change-only publish, STALE retention, manual refresh.</div></div>
     <div class="item"><span class="num">14</span> <span class="t">Stock details redesign</span><div class="d">Google-Finance-style panel, quote endpoint, preset chips, stats grid.</div></div>
     <div class="item"><span class="num">15</span> <span class="t">Adaptive cadence</span><div class="d">TradingWindow-driven open/closed polling (5m/30m), marketOpen metadata → UI.</div></div>
+    <div class="item"><span class="num">16</span> <span class="t">AWS deployment kit</span><div class="d">CloudFront+S3+EC2 topology, ECR/SSM secrets, GitHub OIDC CI/CD runbook.</div></div>
+    <div class="item"><span class="num">17</span> <span class="t">Agent mesh (Stage 1)</span><div class="d">Gateway auth, task queue, orchestrator → workers → evaluator, Redis audit; compose file for single-node run.</div></div>
   </div>
 </section>
 
 <section id="limitations">
-  <h2>10 · Known limitations &amp; roadmap</h2>
+  <h2>11 · Known limitations &amp; roadmap</h2>
   <table>
     <tr><th>Limitation</th><th>Impact</th><th>Mitigation / next step</th></tr>
     <tr><td>Yahoo Finance is unofficial</td><td>Rate limits / behavior changes possible</td><td>Crumb+UA handled; backoff + STALE on failure; a licensed feed is the eventual upgrade</td></tr>
@@ -325,9 +382,9 @@
     <tr><td>~1.2 MB JS bundle</td><td>ApexCharts weight on first paint</td><td>Code-split the chart component</td></tr>
   </table>
   <h3>Test coverage</h3>
-  <p>57 backend tests (cache diffing, adaptive cadence, backoff, endpoint contracts, security/injection)
-  and 17 frontend tests (SSE snapshot/update/stale flows, manual refresh, closed-market disable,
-  details panel, autocomplete, race guards).</p>
+  <p>80 backend tests (cache diffing, adaptive cadence, backoff, endpoint contracts, security/injection,
+  orchestrator routing, evaluator verdicts, gateway auth) and 17 frontend tests (SSE snapshot/update/stale
+  flows, manual refresh, closed-market disable, details panel, autocomplete, race guards).</p>
 </section>
 
 <footer>
