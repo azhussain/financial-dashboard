@@ -1,0 +1,6 @@
+# Shell scripts and CI workflows must keep LF endings (bash/EC2 user-data break on CRLF)
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+Dockerfile* text eol=lf
+.dockerignore text eol=lf
