@@ -4,6 +4,9 @@
 # Prereq: AWS CLI configured with admin-level credentials.
 set -euo pipefail
 
+# Git Bash/MSYS arg mangling guard (harmless on Linux/macOS).
+export MSYS2_ARG_CONV_EXCL='/*'
+
 USER_NAME="${1:-stocks-devops}"
 REGION="${2:-us-east-1}"
 POLICY_NAME="${USER_NAME}-policy"

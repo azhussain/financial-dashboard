@@ -10,7 +10,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export APP=stocks-explorer
+# Git Bash/MSYS rewrites arguments that look like Unix paths ("/x/y" →
+# "C:/Program Files/Git/x/y"), which corrupts SSM parameter names.
+# '/*' exempts every leading-slash arg; file:// args are unaffected.
+export MSYS2_ARG_CONV_EXCL='/*'
+
+export APP=$(echo "stocks-explorer" | tr -d '\r')
 export REGION="${AWS_REGION:-us-east-1}"
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export BUCKET="${APP}-frontend-${ACCOUNT_ID}"
@@ -33,21 +38,17 @@ aws ssm put-parameter --name "/${APP}/OPENAI_API_KEY" --type SecureString \
 echo "==> SSM SecureString /${APP}/OPENAI_API_KEY stored"
 
 # ---------- 3 · EC2 instance role ----------
-TRUST=/tmp/ec2-trust.json
-cat > "$TRUST" <<'EOF'
-{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}
-EOF
+mkdir -p deploy/.tmp
+EC2_TRUST='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
 aws iam get-role --role-name "${APP}-ec2-role" >/dev/null 2>&1 \
-  || aws iam create-role --role-name "${APP}-ec2-role" --assume-role-policy-document "file://${TRUST}" >/dev/null
+  || aws iam create-role --role-name "${APP}-ec2-role" --assume-role-policy-document "${EC2_TRUST}" >/dev/null
 for P in AmazonSSMManagedInstanceCore AmazonEC2ContainerRegistryReadOnly; do
   aws iam attach-role-policy --role-name "${APP}-ec2-role" \
     --policy-arn "arn:aws:iam::aws:policy/${P}" || true
 done
-cat > /tmp/ssm-read.json <<EOF
-{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"ssm:GetParameter","Resource":"arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/${APP}/*"}]}
-EOF
+SSM_READ="{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ssm:GetParameter\",\"Resource\":\"arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/${APP}/*\"}]}"
 aws iam put-role-policy --role-name "${APP}-ec2-role" \
-  --policy-name read-app-params --policy-document file:///tmp/ssm-read.json
+  --policy-name read-app-params --policy-document "${SSM_READ}"
 aws iam get-instance-profile --instance-profile-name "${APP}-ec2-profile" >/dev/null 2>&1 \
   || aws iam create-instance-profile --instance-profile-name "${APP}-ec2-profile" >/dev/null
 aws iam add-role-to-instance-profile --instance-profile-name "${APP}-ec2-profile" \
@@ -125,14 +126,14 @@ sed -e "s|BUCKET_PLACEHOLDER|${BUCKET}|g" \
     -e "s|OAC_ID_PLACEHOLDER|${OAC_ID}|g" \
     -e "s|EC2_DNS_PLACEHOLDER|${EC2_DNS}|g" \
     -e "s|us-east-1|${REGION}|g" \
-    deploy/dist-config.json > /tmp/dist-config-resolved.json
+    deploy/dist-config.json > deploy/.tmp/dist-config-resolved.json
 
 DIST_ID=$(aws cloudfront list-distributions \
   --query "DistributionList.Items[?Comment=='Stocks Explorer: S3 SPA + EC2 /api origin'].Id" \
   --output text 2>/dev/null || true)
 if [ -z "$DIST_ID" ] || [ "$DIST_ID" = "None" ]; then
   DIST_ID=$(aws cloudfront create-distribution \
-    --distribution-config file:///tmp/dist-config-resolved.json \
+    --distribution-config file://deploy/.tmp/dist-config-resolved.json \
     --query 'Distribution.Id' --output text)
 fi
 DIST_DOMAIN=$(aws cloudfront get-distribution --id "$DIST_ID" \
@@ -140,13 +141,8 @@ DIST_DOMAIN=$(aws cloudfront get-distribution --id "$DIST_ID" \
 echo "==> CloudFront ${DIST_ID} @ https://${DIST_DOMAIN}  (provisioning takes ~5 min)"
 
 # ---------- 9 · Bucket policy (OAC access) ----------
-cat > /tmp/bucket-policy.json <<EOF
-{"Version":"2012-10-17","Statement":[{"Sid":"AllowCloudFront","Effect":"Allow",
-"Principal":{"Service":"cloudfront.amazonaws.com"},"Action":"s3:GetObject",
-"Resource":"arn:aws:s3:::${BUCKET}/*",
-"Condition":{"StringEquals":{"AWS:SourceArn":"arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${DIST_ID}"}}}]}
-EOF
-aws s3api put-bucket-policy --bucket "$BUCKET" --policy file:///tmp/bucket-policy.json
+BUCKET_POLICY="{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"AllowCloudFront\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"cloudfront.amazonaws.com\"},\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::${BUCKET}/*\",\"Condition\":{\"StringEquals\":{\"AWS:SourceArn\":\"arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${DIST_ID}\"}}}]}"
+aws s3api put-bucket-policy --bucket "$BUCKET" --policy "${BUCKET_POLICY}"
 echo "==> Bucket policy attached (OAC-only access)"
 
 # ---------- 10 · GitHub OIDC + deploy role ----------
@@ -158,14 +154,15 @@ aws iam list-open-id-connect-providers \
        --client-id-list sts.amazonaws.com \
        --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1 >/dev/null
 
-sed -e "s|ACCOUNT_ID_PLACEHOLDER|${ACCOUNT_ID}|g" deploy/github-oidc-trust.json > /tmp/oidc-trust.json
+sed "s|ACCOUNT_ID_PLACEHOLDER|${ACCOUNT_ID}|g" \
+  deploy/github-oidc-trust.json > deploy/.tmp/oidc-trust.json
 aws iam get-role --role-name stocks-github-deploy >/dev/null 2>&1 \
   || aws iam create-role --role-name stocks-github-deploy \
-       --assume-role-policy-document file:///tmp/oidc-trust.json >/dev/null
+       --assume-role-policy-document file://deploy/.tmp/oidc-trust.json >/dev/null
 sed -e "s|ACCOUNT_ID_PLACEHOLDER|${ACCOUNT_ID}|g" -e "s|REGION_PLACEHOLDER|${REGION}|g" \
-    deploy/github-deploy-policy.json > /tmp/deploy-policy.json
+    deploy/github-deploy-policy.json > deploy/.tmp/deploy-policy.json
 aws iam put-role-policy --role-name stocks-github-deploy \
-  --policy-name deploy --policy-document file:///tmp/deploy-policy.json
+  --policy-name deploy --policy-document file://deploy/.tmp/deploy-policy.json
 echo "==> GitHub OIDC provider + stocks-github-deploy role ready"
 
 # ---------- Outputs ----------
