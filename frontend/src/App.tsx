@@ -96,8 +96,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
-      <div className="mx-auto max-w-[1600px] px-6 py-8">
-        <header className="flex w-full items-start justify-between gap-6">
+      <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8">
+        <header className="flex w-full flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div>
             <h1 className="bg-gradient-to-r from-emerald-300 via-emerald-400 to-cyan-400 bg-clip-text text-2xl font-bold tracking-tight text-transparent sm:text-3xl">
               Stocks Explorer
@@ -151,14 +151,14 @@ export default function App() {
 
               {expanded && (
                 <div className="border-t border-gray-800 p-5">
-                  <div className="flex flex-wrap items-end gap-4">
+                  <div className="flex flex-wrap items-end gap-3 sm:gap-4">
                     <TickerInput
                       value={ticker}
                       onChange={setTicker}
                       onSubmit={() => fetchData()}
                     />
 
-                    <label className="flex flex-col gap-1.5">
+                    <label className="flex min-w-36 flex-1 flex-col gap-1.5 sm:flex-initial">
                       <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
                         Start date
                       </span>
@@ -169,11 +169,11 @@ export default function App() {
                           setStartDate(e.target.value)
                           setActivePreset(null)
                         }}
-                        className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm [color-scheme:dark] focus:border-emerald-500 focus:outline-none"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm [color-scheme:dark] focus:border-emerald-500 focus:outline-none"
                       />
                     </label>
 
-                    <label className="flex flex-col gap-1.5">
+                    <label className="flex min-w-36 flex-1 flex-col gap-1.5 sm:flex-initial">
                       <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
                         End date
                       </span>
@@ -184,19 +184,19 @@ export default function App() {
                           setEndDate(e.target.value)
                           setActivePreset(null)
                         }}
-                        className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm [color-scheme:dark] focus:border-emerald-500 focus:outline-none"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm [color-scheme:dark] focus:border-emerald-500 focus:outline-none"
                       />
                     </label>
 
                     <button
                       onClick={() => fetchData()}
                       disabled={loading}
-                      className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="w-full rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:py-2"
                     >
                       {loading ? 'Loading…' : 'Load chart'}
                     </button>
 
-                    <div className="ml-auto flex items-center gap-2">
+                    <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:ml-auto sm:w-auto sm:overflow-visible sm:pb-0">
                       {PRESETS.map((p) => (
                         <button
                           key={p.label}
@@ -207,7 +207,7 @@ export default function App() {
                             setEndDate(t)
                             fetchData(undefined, f, t)
                           }}
-                          className={`rounded-lg px-3.5 py-2 text-sm font-medium transition ${
+                          className={`shrink-0 rounded-lg px-3.5 py-2 text-sm font-medium transition ${
                             activePreset === p.label
                               ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40'
                               : 'bg-gray-800 text-gray-300 ring-1 ring-transparent hover:text-emerald-300'
@@ -260,7 +260,7 @@ export default function App() {
 
       <AgentChat />
 
-      <footer className="mx-auto mt-12 max-w-[1600px] border-t border-gray-800 px-6 py-8">
+      <footer className="mx-auto mt-12 max-w-[1600px] border-t border-gray-800 px-4 py-8 sm:px-6">
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl space-y-2 text-xs leading-relaxed text-gray-500">
             <p className="font-semibold uppercase tracking-wide text-gray-400">

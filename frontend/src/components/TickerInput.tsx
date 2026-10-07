@@ -92,7 +92,7 @@ export default function TickerInput({ value, onChange, onSubmit }: Props) {
   }
 
   return (
-    <label className="relative flex flex-col gap-1.5">
+    <label className="relative flex w-full flex-col gap-1.5 sm:w-auto">
       <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
         Ticker
       </span>
@@ -112,13 +112,13 @@ export default function TickerInput({ value, onChange, onSubmit }: Props) {
         onBlur={() => setOpen(false)}
         placeholder="AAPL"
         autoComplete="off"
-        className="w-48 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm uppercase placeholder:text-gray-500 focus:border-emerald-500 focus:outline-none"
+        className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm uppercase placeholder:text-gray-500 focus:border-emerald-500 focus:outline-none sm:w-48"
       />
       {open && (
         <ul
           id="ticker-suggestions"
           role="listbox"
-          className="absolute top-full z-20 mt-1 max-h-64 w-80 overflow-y-auto rounded-lg border border-gray-700 bg-gray-800 py-1 shadow-xl"
+          className="absolute top-full z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-700 bg-gray-800 py-1 shadow-xl sm:w-80"
         >
           {suggestions.map((s, i) => (
             <li

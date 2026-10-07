@@ -70,9 +70,10 @@ export default function AgentChat() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
       {open && (
-        <div className="flex h-[560px] w-[min(400px,calc(100vw-3rem))] flex-col overflow-hidden rounded-xl bg-gray-900 shadow-2xl ring-1 ring-gray-700">
+        // Full-screen sheet on phones (keyboard-safe); floating card on sm+.
+        <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-900 sm:static sm:z-auto sm:h-[560px] sm:w-[min(400px,calc(100vw-3rem))] sm:rounded-xl sm:shadow-2xl sm:ring-1 sm:ring-gray-700">
           <div className="flex items-start justify-between border-b border-gray-800 px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">

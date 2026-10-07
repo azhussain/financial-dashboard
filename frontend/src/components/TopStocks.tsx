@@ -114,7 +114,7 @@ const StockRow = memo(function StockRow({
         >
           {up ? '+' : ''}
           {stock.changePercent.toFixed(2)}%
-          <span className="ml-1.5 text-gray-500">
+          <span className="ml-1.5 hidden text-gray-500 sm:inline">
             {formatMarketCap(stock.marketCap, stock.currency)}
           </span>
         </div>
@@ -212,7 +212,7 @@ export default function TopStocks({ onSelect, selected }: Props) {
       {labels.map(([region, { quotes, meta }]) => (
         <div
           key={region}
-          className="flex max-h-[32rem] flex-col rounded-xl bg-gray-900/60 p-4 ring-1 ring-gray-800"
+          className="flex max-h-[26rem] flex-col rounded-xl bg-gray-900/60 p-4 ring-1 ring-gray-800 md:max-h-[32rem]"
         >
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-emerald-300">
