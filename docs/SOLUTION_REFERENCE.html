@@ -340,12 +340,14 @@
   behavior serves the React SPA from a private <strong>S3</strong> bucket (origin access
   control — the bucket is never public), and <code>/api/*</code> proxies to the Spring
   Boot container on <strong>EC2</strong> (Docker, image in ECR, secrets in SSM Parameter
-  Store). Same-origin means no CORS config and no <code>VITE_API_BASE</code> at build time.</p>
+  Store). Same-origin means no CORS config and no <code>VITE_API_BASE</code> at build time.
+  <strong>Live:</strong> <a href="https://d34dt5lk8nd7oj.cloudfront.net">d34dt5lk8nd7oj.cloudfront.net</a> (us-east-1) — SPA, API and SSE verified end-to-end.</p>
   <div class="grid cols3">
     <div class="card"><h4>Frontend → S3 + CloudFront</h4><p><code>npm run build</code> → <code>aws s3 sync dist/</code> → invalidation. SPA fallback via CloudFront error responses (403/404 → <code>index.html</code>). HTTPS free on the <code>cloudfront.net</code> domain.</p></div>
     <div class="card"><h4>Backend → EC2 + ECR</h4><p>Multi-stage <code>Dockerfile</code> on a t3.small (<code>--restart unless-stopped</code>). SG allows 8080 only from CloudFront's origin-facing prefix list. Env: <code>OPENAI_API_KEY</code> (from SSM SecureString), <code>PORT</code>. Probe: <code>/api/health</code>.</p></div>
-    <div class="card"><h4>CI/CD → GitHub Actions</h4><p>Push → test → ECR push → SSM rolling restart; S3 sync + invalidation. OIDC auth, no stored keys. Full runbook: <code>deploy/aws-setup.md</code>. ~$15–20/mo all-in.</p></div>
+    <div class="card"><h4>CI/CD → GitHub Actions</h4><p>Push → test → ECR push → SSM rolling restart; S3 sync + invalidation. OIDC auth, no stored keys. Only <code>AWS_DEPLOY_ROLE_ARN</code> secret needed — other values resolve from AWS at runtime. ~$15–20/mo all-in.</p></div>
   </div>
+  <div class="note">Provisioning is automated by <code>deploy/aws-setup.sh</code> — one idempotent run creates ECR, the SSM secret, the EC2 role/instance/SG, Elastic IP, the S3 bucket, OAC + distribution, and the GitHub OIDC deploy role. <code>deploy/aws-setup.md</code> is the manual runbook; <code>deploy/ec2-userdata.sh</code> bootstraps the instance (IMDSv2-aware — required on AL2023).</div>
   <div class="note">SSE streams through CloudFront — <code>/api/*</code> disables caching and compression, and the app's 25s heartbeat stays under the 60s origin read timeout.</div>
 </section>
 
@@ -367,6 +369,8 @@
     <div class="item"><span class="num">15</span> <span class="t">Adaptive cadence</span><div class="d">TradingWindow-driven open/closed polling (5m/30m), marketOpen metadata → UI.</div></div>
     <div class="item"><span class="num">16</span> <span class="t">AWS deployment kit</span><div class="d">CloudFront+S3+EC2 topology, ECR/SSM secrets, GitHub OIDC CI/CD runbook.</div></div>
     <div class="item"><span class="num">17</span> <span class="t">Agent mesh (Stage 1)</span><div class="d">Gateway auth, task queue, orchestrator → workers → evaluator, Redis audit; compose file for single-node run.</div></div>
+    <div class="item"><span class="num">18</span> <span class="t">Live on AWS</span><div class="d">aws-setup.sh one-shot provisioning; Git Bash path-mangling + IMDSv2 fixes; image pushed, bootstrap verified; only AWS_DEPLOY_ROLE_ARN needed for CI.</div></div>
+    <div class="item"><span class="num">19</span> <span class="t">Mobile UI</span><div class="d">Responsive pass — stacked header, full-width controls, scrollable presets, full-screen chat sheet; overflow-x: clip kills the horizontal-overflow gutter.</div></div>
   </div>
 </section>
 

@@ -12,6 +12,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the high-level design.
 - **Stock details panel** — Google-Finance-style: live price + currency, change chip, source timestamp + market status, `1D 5D 1M 1Y 5Y Max` preset chips, candlestick chart (ApexCharts), and a two-column stats grid (Open/High/Low, Vol/Avg Vol, Mkt Cap, 52wk High/Low)
 - **Smart ticker autocomplete** — suggestions (symbol, company, exchange) as you type, with keyboard navigation; programmatic selections never open the dropdown
 - **Virtual Agent** — floating chat widget (bottom-right) powered by LangChain4j + OpenAI tool calling. Context-aware conversation memory, bullet-formatted answers grounded in the same live data the dashboard shows, and inline candlestick charts only when you ask for one ("show me a chart of NVDA")
+- **Mobile-first responsive** — phones get a stacked header, full-width controls with a scrollable preset row, a full-screen chat sheet, and overflow-clip guarding so nothing can widen the page past the viewport; watchlist rows shed the market-cap chip under `sm`
 
 ## Tech stack
 
@@ -34,7 +35,9 @@ financial-dashboard/
 │       └── test/java/com/example/dashboard/       unit + controller + security tests
 ├── frontend/         Vite + React single-page app
 │   └── src/components/   TopStocks · TickerInput · StockDetails · CandleChart · AgentChat
-└── docs/               ARCHITECTURE.md · PROJECT_SUMMARY.md · PROJECT_SUMMARY_PROMPT.md
+├── deploy/           aws-setup.sh (automation) · aws-setup.md (runbook) · ec2-userdata.sh
+│                     create-devops-user.sh · dist-config.json · github-*.json · docker-compose.yml
+└── docs/               ARCHITECTURE.md · SOLUTION_REFERENCE.html (self-contained reference doc)
 ```
 
 ## Prerequisites
@@ -112,13 +115,15 @@ Browser ──HTTPS──▶ CloudFront (dxxxx.cloudfront.net)
                      └─ /api/* → EC2 :8080 (no cache)   — Spring Boot container
 ```
 
+**Live**: https://d34dt5lk8nd7oj.cloudfront.net (us-east-1; SPA + API + SSE verified end-to-end)
+
 **Backend** — `backend/Dockerfile` is a multi-stage Maven → JRE build; run with `--restart unless-stopped -p 8080:8080`. Environment variables: `PORT` (default 8080), `OPENAI_API_KEY` (enables the agent; on EC2 it's injected from the SSM SecureString `/stocks-explorer/OPENAI_API_KEY`), `CORS_ALLOWED_ORIGINS` (optional — same-origin deploy doesn't need it). Health probe: `GET /api/health`.
 
 **Frontend** — `npm ci && npm run build` in `frontend/`, then `aws s3 sync dist/ s3://<bucket> --delete` and a CloudFront invalidation. `VITE_API_BASE` stays empty by design.
 
-**Step-by-step**: `deploy/aws-setup.md` is the full runbook (IAM roles, ECR, SSM secret, EC2 + security group locked to CloudFront's origin prefix list, S3+OAC, distribution config in `deploy/dist-config.json`, smoke tests, rollback). `deploy/ec2-userdata.sh` bootstraps a fresh instance.
+**Step-by-step**: `deploy/aws-setup.sh` automates the whole provisioning in one idempotent run (`AWS_PROFILE=… bash deploy/aws-setup.sh` — safe to re-run, detects existing resources); `deploy/create-devops-user.sh` creates a scoped IAM user to run it under; `deploy/aws-setup.md` is the equivalent manual runbook. `deploy/ec2-userdata.sh` bootstraps a fresh instance (IMDSv2-aware — AL2023 requires the token flow).
 
-**CI/CD**: `.github/workflows/deploy.yml` runs on push — backend tests → Docker build → ECR push → SSM rolling restart on the tagged instance; frontend tests → build → S3 sync → CloudFront invalidation. Auth is GitHub OIDC (`deploy/github-oidc-trust.json` + `github-deploy-policy.json`) — no stored AWS keys.
+**CI/CD**: `.github/workflows/deploy.yml` runs on push — backend tests → Docker build → ECR push → SSM rolling restart on the `App=stocks-explorer`-tagged instance; frontend tests → build → S3 sync → CloudFront invalidation. Auth is GitHub OIDC (`deploy/github-oidc-trust.json` + `github-deploy-policy.json`) — no stored AWS keys. The only required GitHub secret is `AWS_DEPLOY_ROLE_ARN`; account id, bucket, and distribution are resolved from AWS at runtime (repo vars override).
 
 Notes: SSE streams through CloudFront — `/api/*` uses `CachingDisabled` with compression off, and the app's 25s heartbeat sits inside CloudFront's 60s origin read timeout. Long Virtual Agent answers can still hit that timeout; a streaming chat endpoint is a planned follow-up. To protect the OpenAI quota, add an AWS WAF rate-based rule on `/api/agent/*` (e.g. 100 req/5min/IP).
 
@@ -174,6 +179,9 @@ Agent tools (`StockTools`): `searchStocks`, `getTopStocks`, `getRegionalTopStock
 | 13 | Markets Agent + SSE | `RegionalMarketWorker` abstraction + Americas/EMEA/APAC workers; shared 5-min scheduler with bounded backoff and no overlap; `MarketDataCache` diffing publishes only changed quotes; SSE `snapshot`/`market-update` events + heartbeat; memoized rows so unchanged values never re-render; STALE markers on outage; per-region manual refresh (`POST /api/markets/{region}/refresh`) |
 | 14 | Stock details redesign | Google-Finance-style panel — live quote header (price/currency/change/status/timestamp via `GET /{symbol}/quote`), `1D–Max` chips, stats grid (Open/High/Low, Vol/Avg Vol, Mkt Cap, 52wk); single controls row; scroll-to-details on tile click; dropdown no longer opens on programmatic ticker sets; renamed Stocks Explorer |
 | 15 | Adaptive cadence | Per-region `TradingWindow`s (NYSE/TSX, Tokyo/HK/Seoul/Taipei/Sydney, Continental Europe + Tadawul Sun–Thu); 5-min refresh while open, 30-min while closed; `marketOpen` flows through snapshot/SSE events → `closed` chip + disabled refresh button |
+| 16 | Agent mesh (Stage 1) | `GatewayAuthFilter` on `/api/agent/**`; `TaskQueue`/`AgentWorker`/`ResultEvaluator`/`AuditStore` contracts; orchestrator routes `QUOTE_LOOKUP`/`REGION_SNAPSHOT`/`REGION_REFRESH` to `DataAgentWorker`; deterministic PASS/FAIL with one requeue; in-memory + Redis audit |
+| 17 | AWS deployment | `deploy/aws-setup.sh` one-shot provisioning (ECR, SSM secret, EC2+SG locked to CloudFront, S3+OAC, distribution, GitHub OIDC role); Git Bash path-mangling and AL2023 IMDSv2 fixes; image pushed, instance bootstrapped, live at the `cloudfront.net` URL |
+| 18 | Mobile UI | Responsive pass (stacked header, full-width controls, scrollable presets, full-screen chat sheet, hidden market-cap chips) + `overflow-x: clip` guard fixing the horizontal-overflow white gutter |
 
 ## Notes
 
