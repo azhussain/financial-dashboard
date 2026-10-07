@@ -43,6 +43,12 @@
       "Effect": "Allow",
       "Action": "cloudfront:CreateInvalidation",
       "Resource": "arn:aws:cloudfront::ACCOUNT_ID_PLACEHOLDER:distribution/*"
+    },
+    {
+      "Sid": "CloudFrontLookup",
+      "Effect": "Allow",
+      "Action": "cloudfront:ListDistributions",
+      "Resource": "*"
     }
   ]
 }
