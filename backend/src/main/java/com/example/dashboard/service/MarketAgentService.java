@@ -1,6 +1,7 @@
 package com.example.dashboard.service;
 
 import com.example.dashboard.agent.MarketAgent;
+import com.example.dashboard.agent.McpToolsService;
 import com.example.dashboard.agent.StockTools;
 import com.example.dashboard.dto.ChartPayload;
 import com.example.dashboard.dto.ChatResponse;
@@ -62,15 +63,27 @@ public class MarketAgentService {
         return CHART_INTENT.matcher(message).find();
     }
 
+    // Appended to the system message only when MCP servers are configured —
+    // their tools (news, filings, fetch, …) appear alongside the stock tools.
+    private static final String MCP_HINT = """
+
+            You may also have external MCP tools (news, SEC filings, web fetch);
+            prefer them for anything the stock tools don't cover, and still
+            ground every claim in a tool result — never memory.
+            """;
+
     private final StockTools stockTools;
+    private final McpToolsService mcpTools;
     private final String apiKey;
     private final String modelName;
     private volatile MarketAgent agent;
 
     public MarketAgentService(StockTools stockTools,
+                              McpToolsService mcpTools,
                               @Value("${agent.openai.api-key:}") String apiKey,
                               @Value("${agent.openai.model:gpt-4o-mini}") String modelName) {
         this.stockTools = stockTools;
+        this.mcpTools = mcpTools;
         this.apiKey = apiKey;
         this.modelName = modelName;
     }
@@ -99,7 +112,7 @@ public class MarketAgentService {
         if (agent == null) {
             synchronized (this) {
                 if (agent == null) {
-                    agent = AiServices.builder(MarketAgent.class)
+                    var builder = AiServices.builder(MarketAgent.class)
                             .chatModel(OpenAiChatModel.builder()
                                     .apiKey(apiKey)
                                     .modelName(modelName)
@@ -109,8 +122,14 @@ public class MarketAgentService {
                             // Per-session memory so concurrent users/tabs get
                             // isolated conversations.
                             .chatMemoryProvider(id ->
-                                    MessageWindowChatMemory.withMaxMessages(20))
+                                    MessageWindowChatMemory.withMaxMessages(20));
+                    var provider = mcpTools.toolProvider();
+                    if (provider != null) {
+                        builder.toolProvider(provider);
+                    }
+                    agent = builder
                             .systemMessageProvider(id -> SYSTEM_MESSAGE
+                                    + (provider != null ? MCP_HINT : "")
                                     + " Today's date is " + LocalDate.now() + ".")
                             .build();
                 }
