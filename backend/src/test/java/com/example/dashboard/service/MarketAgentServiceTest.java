@@ -1,5 +1,6 @@
 package com.example.dashboard.service;
 
+import com.example.dashboard.agent.McpToolsService;
 import com.example.dashboard.agent.StockTools;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,9 +16,12 @@ class MarketAgentServiceTest {
     @Mock
     private StockTools stockTools;
 
+    private final McpToolsService noMcp = new McpToolsService("");
+
     @Test
     void disabledWhenApiKeyMissing() {
-        MarketAgentService service = new MarketAgentService(stockTools, "", "gpt-4o-mini");
+        MarketAgentService service =
+                new MarketAgentService(stockTools, noMcp, "", "gpt-4o-mini");
 
         assertThat(service.isEnabled()).isFalse();
         assertThatThrownBy(() -> service.chat("hello", "s1"))

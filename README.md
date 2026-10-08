@@ -12,6 +12,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the high-level design.
 - **Stock details panel** — Google-Finance-style: live price + currency, change chip, source timestamp + market status, `1D 5D 1M 1Y 5Y Max` preset chips, candlestick chart (ApexCharts), and a two-column stats grid (Open/High/Low, Vol/Avg Vol, Mkt Cap, 52wk High/Low)
 - **Smart ticker autocomplete** — suggestions (symbol, company, exchange) as you type, with keyboard navigation; programmatic selections never open the dropdown
 - **Virtual Agent** — floating chat widget (bottom-right) powered by LangChain4j + OpenAI tool calling. Context-aware conversation memory, bullet-formatted answers grounded in the same live data the dashboard shows, and inline candlestick charts only when you ask for one ("show me a chart of NVDA")
+- **MCP tool servers** *(prototype)* — the agent can additionally consume any MCP server via `MCP_SERVERS` (`name|http|url` or `name|stdio|command`, comma-separated) — e.g. SEC EDGAR filings or a news/fetch server. Unreachable servers are skipped, never fatal
 - **Mobile-first responsive** — phones get a stacked header, full-width controls with a scrollable preset row, a full-screen chat sheet, and overflow-clip guarding so nothing can widen the page past the viewport; watchlist rows shed the market-cap chip under `sm`
 
 ## Tech stack
@@ -117,7 +118,7 @@ Browser ──HTTPS──▶ CloudFront (dxxxx.cloudfront.net)
 
 **Live**: https://d34dt5lk8nd7oj.cloudfront.net (us-east-1; SPA + API + SSE verified end-to-end)
 
-**Backend** — `backend/Dockerfile` is a multi-stage Maven → JRE build; run with `--restart unless-stopped -p 8080:8080`. Environment variables: `PORT` (default 8080), `OPENAI_API_KEY` (enables the agent; on EC2 it's injected from the SSM SecureString `/stocks-explorer/OPENAI_API_KEY`), `CORS_ALLOWED_ORIGINS` (optional — same-origin deploy doesn't need it). Health probe: `GET /api/health`.
+**Backend** — `backend/Dockerfile` is a multi-stage Maven → JRE build; run with `--restart unless-stopped -p 8080:8080`. Environment variables: `PORT` (default 8080), `OPENAI_API_KEY` (enables the agent; on EC2 it's injected from the SSM SecureString `/stocks-explorer/OPENAI_API_KEY`), `CORS_ALLOWED_ORIGINS` (optional — same-origin deploy doesn't need it), `MCP_SERVERS` (optional external tool servers). Health probe: `GET /api/health`.
 
 **Frontend** — `npm ci && npm run build` in `frontend/`, then `aws s3 sync dist/ s3://<bucket> --delete` and a CloudFront invalidation. `VITE_API_BASE` stays empty by design.
 
