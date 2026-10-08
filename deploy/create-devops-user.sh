@@ -30,6 +30,7 @@ cat > "${POLICY_FILE}" <<'EOF'
         "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:TagRole",
         "iam:AttachRolePolicy", "iam:DetachRolePolicy",
         "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
         "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
         "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile",
         "iam:CreateOpenIDConnectProvider", "iam:GetOpenIDConnectProvider",
