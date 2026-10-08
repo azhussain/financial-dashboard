@@ -14,3 +14,4 @@ dist/
 # Deploy outputs (resource IDs written by aws-setup.sh)
 deploy/.aws-output.env
 deploy/.tmp/
+.devin/
