@@ -72,8 +72,9 @@ export default function AgentChat() {
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
       {open && (
-        // Full-screen sheet on phones (keyboard-safe); floating card on sm+.
-        <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-gray-900 sm:static sm:z-auto sm:h-[560px] sm:w-[min(400px,calc(100vw-3rem))] sm:rounded-xl sm:shadow-2xl sm:ring-1 sm:ring-gray-700">
+        // Bottom sheet on phones — 85dvh tracks the keyboard, dashboard stays
+        // visible behind it; floating card on sm+.
+        <div className="fixed inset-x-0 bottom-0 z-50 flex h-[85dvh] flex-col overflow-hidden rounded-t-2xl bg-gray-900 shadow-2xl ring-1 ring-gray-700 sm:static sm:z-auto sm:h-[560px] sm:w-[min(400px,calc(100vw-3rem))] sm:rounded-xl">
           <div className="flex items-start justify-between border-b border-gray-800 px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">
