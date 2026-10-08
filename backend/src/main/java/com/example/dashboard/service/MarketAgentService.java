@@ -29,6 +29,11 @@ public class MarketAgentService {
             rankings or performance from memory. Resolve company names to
             tickers with the search tool when unsure.
 
+            News: for headline/news questions use the news tool — it returns
+            fresh Yahoo Finance headlines; quote title and date, link the
+            source, and say when the feed has nothing recent rather than
+            guessing.
+
             Format: answer in short markdown bullet points with **bold**
             tickers/figures, a one-line lead-in, and no long paragraphs.
 

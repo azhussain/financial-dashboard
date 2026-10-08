@@ -2,6 +2,8 @@ package com.example.dashboard.agent;
 
 import com.example.dashboard.dto.Candle;
 import com.example.dashboard.dto.ChartPayload;
+import com.example.dashboard.dto.NewsItem;
+import com.example.dashboard.service.NewsService;
 import com.example.dashboard.service.StockService;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -18,12 +20,14 @@ import java.util.Map;
 public class StockTools {
 
     private final StockService stockService;
+    private final NewsService newsService;
 
     // Charts fetched by tools during a single chat turn, for the UI to render.
     private final ThreadLocal<List<ChartPayload>> collectedCharts = new ThreadLocal<>();
 
-    public StockTools(StockService stockService) {
+    public StockTools(StockService stockService, NewsService newsService) {
         this.stockService = stockService;
+        this.newsService = newsService;
     }
 
     public void beginCollecting() {
@@ -67,6 +71,15 @@ public class StockTools {
     public Object getRegionalTopStocks(
             @P("how many stocks per region, 1-10") int limit) throws Exception {
         return stockService.getTopStocksByRegion(Math.max(1, Math.min(limit, 10)));
+    }
+
+    @Tool("Get the latest news headlines for a ticker from Yahoo Finance. "
+            + "Returns recent headlines with publication date and a link to the "
+            + "source article. Use this for news, headlines or 'what's happening "
+            + "with X' questions, and cite the headline dates in your answer.")
+    public List<NewsItem> getStockNews(
+            @P("ticker symbol, e.g. NVDA") String symbol) {
+        return newsService.getHeadlines(symbol.toUpperCase(), 5);
     }
 
     @Tool("Get daily OHLC stock price history (open, high, low, close, volume) "
