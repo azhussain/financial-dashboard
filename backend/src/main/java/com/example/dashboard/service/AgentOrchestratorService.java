@@ -130,9 +130,11 @@ public class AgentOrchestratorService {
                         long started) {
         long now = System.currentTimeMillis();
         evictIfNeeded();
-        results.put(task.id(), new TaskResult(task.id(), status, data, reason, now));
+        // Audit first: a terminal status() must imply the audit entry exists,
+        // otherwise pollers see PASS/FAIL before the record is visible.
         audit.record(new TaskAuditEntry(task.id(), task.type(), status, task.attempts(),
                 now - started, reason, now));
+        results.put(task.id(), new TaskResult(task.id(), status, data, reason, now));
         log.info("Agent task {} {} ({}) in {}ms{}", task.id(), status, task.type(),
                 now - started, reason != null ? ": " + reason : "");
     }
