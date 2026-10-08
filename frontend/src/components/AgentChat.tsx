@@ -56,7 +56,11 @@ export default function AgentChat() {
       } else {
         setMessages((m) => [
           ...m,
-          { role: 'assistant', text: body.message, charts: body.charts },
+          {
+            role: 'assistant',
+            text: body?.message ?? 'Unexpected response from the agent.',
+            charts: body?.charts,
+          },
         ])
       }
     } catch (e) {

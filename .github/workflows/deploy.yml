@@ -59,13 +59,16 @@ jobs:
         run: |
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           IMAGE="${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}"
+          DOMAIN=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='Stocks Explorer: S3 SPA + EC2 /api origin'].DomainName" \
+            --output text)
           cat > ssm-params.json <<EOF
           {"commands":[
             "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${IMAGE%%/*}",
             "docker rm -f stocks-api 2>/dev/null || true",
             "docker pull ${IMAGE}:latest",
             "OPENAI_API_KEY=\$(aws ssm get-parameter --name /stocks-explorer/OPENAI_API_KEY --with-decryption --region ${AWS_REGION} --query Parameter.Value --output text || true)",
-            "docker run -d --name stocks-api --restart unless-stopped -p 8080:8080 -e PORT=8080 -e OPENAI_API_KEY=\"\$OPENAI_API_KEY\" ${IMAGE}:latest",
+            "docker run -d --name stocks-api --restart unless-stopped -p 8080:8080 -e PORT=8080 -e OPENAI_API_KEY=\"\$OPENAI_API_KEY\" -e CORS_ALLOWED_ORIGINS=\"https://${DOMAIN}\" ${IMAGE}:latest",
             "for i in \$(seq 1 30); do curl -sf localhost:8080/api/health && exit 0; sleep 2; done; exit 1"
           ]}
           EOF

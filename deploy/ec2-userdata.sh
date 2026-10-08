@@ -9,6 +9,9 @@ APP_PORT="${APP_PORT:-8080}"
 ECR_REPO="${ECR_REPO:-stocks-explorer-backend}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 SSM_PARAM="${SSM_PARAM:-/stocks-explorer/OPENAI_API_KEY}"
+# Browsers send Origin on fetch POSTs — without this, Spring rejects /api/agent/chat
+# with 403 and CloudFront's SPA error mapping returns index.html instead of JSON.
+CORS_ORIGINS="${CORS_ORIGINS:-https://d34dt5lk8nd7oj.cloudfront.net}"
 
 # IMDSv2 is required on AL2023 — token first, then the identity document.
 IMDS_TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token \
@@ -33,6 +36,7 @@ docker run -d --name stocks-api --restart unless-stopped \
   -p "${APP_PORT}:8080" \
   -e PORT=8080 \
   -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
+  -e CORS_ALLOWED_ORIGINS="${CORS_ORIGINS}" \
   "${ECR_URI}:${IMAGE_TAG}"
 
 for i in $(seq 1 30); do
